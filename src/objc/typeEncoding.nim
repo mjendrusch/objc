@@ -65,6 +65,9 @@ proc genTypeEncoding*(typ: NimNode; pointerDepth: int = 0): string =
     elif typ.eqIdent "Class":
       return "#"
   case typeImplementation.kind
+  of nnkRefTy:
+    if typeImplementation[0].getTypeImpl.isObject:
+      result = "@"
   of nnkObjectTy:
     if typeImplementation.isClass and pointerDepth > 0:
       result = "@"
@@ -85,6 +88,7 @@ proc genTypeEncoding*(typ: NimNode; pointerDepth: int = 0): string =
   of nnkSym:
     result = genPrimitiveTypeEncoding(typeImplementation)
   else:
+    echo treeRepr(typeImplementation)
     echo "ERROR"
 
 proc genProcEncoding*(procedure: NimNode): string =

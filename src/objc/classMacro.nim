@@ -1,4 +1,4 @@
-import objc.base, objc.hli, objc.typeEncoding, objc.macroCommons
+import objc.base, objc.hli, objc.typeEncoding, objc.macroCommons, objc.methodCallMacro, objc.methodMacro
 import macros
 
 proc makeClassNames(nameExpr: NimNode): tuple[class, super: NimNode] =
@@ -14,15 +14,17 @@ proc makeClassTypeDecl(class, super, decls: NimNode): NimNode =
   ## name and the name of their superclass, if any.
   let
     className = ident($class.ident & "Class")
+    classObject = ident($class.ident & "Obj")
     metaClassName = ident($class.ident & "MetaClass")
   if super.isNil:
     result = quote do:
       type
         `metaClassName`* = object of MetaClassType
         `className`* = object of ClassType
-        `class`* = ref object of Object
-      template class*(typ: typedesc[`class`]): untyped = `className`
-      template metaClass*(typ: typedesc[`class`]): untyped = `metaClassName`
+        `classObject`* = object of Object
+        `class`* = ref `classObject`
+      template classType*(typ: typedesc[`class`]): untyped = `className`
+      template metaClassType*(typ: typedesc[`class`]): untyped = `metaClassName`
   else:
     let
       superClassName = ident($super.ident & "Class")
@@ -95,9 +97,46 @@ proc makeClassVariable(class, super, decls: NimNode): NimNode =
           newClass(class(`superName`), `className`, 0) # FIXME
       `addAllIvars`
       `theClass`.register
-    template `procName`*(clsType: typedesc[`class`]): `classType` =
-      class(`className`)
-    template `converterName`*(cls: `class`): Id = cast[Id](cls)
+
+proc makeClassUtils*(className, superName: NimNode): NimNode =
+  ## Creates utility templates, procedures and converters for a given class.
+  let
+    procName = ident"class"
+    converterName = ident"dyn"
+    classType = bindsym"Class"
+    classString = className.toStrLit
+    newClass = ident("new" & $className.ident)
+  result = quote do:
+    template `procName`*(clsType: typedesc[`className`]): `classType` =
+      class(`classString`)
+    template `converterName`*(cls: `className`): Id = cls.id
+    proc standardDispose(cls: `className`) =
+      discard objcMsgSend(cls.id, $$"release")
+    proc `newClass`*: `className` =
+      var res: `className`
+      new res, standardDispose
+      res.id = objcMsgSend(
+        objcMsgSend(`className`.class.Id,
+                    $$"alloc"),
+        $$"init")
+      res
+    proc `newClass`*(id: Id): `className` =
+      var res: `className`
+      new res, standardDispose
+      res.id = id
+      discard objcMsgSend(id, $$"retain")
+      res
+    # proc `newClass`*(dispose: proc(cls: `className`)): `className` =
+    #   proc fullDispose(cls: `className`) =
+    #     standardDispose(cls)
+    #     dispose(cls)
+    #   var res: `className`
+    #   new res, fullDispose
+    #   res.id = objcMsgSend(
+    #     objcMsgSend(`className`.class.Id,
+    #                 $$"alloc"),
+    #     $$"init")
+    #   res
 
 macro objectiveClass*(nameExpr: untyped, decls: untyped): untyped =
   ## Creates types, variables and procedures for an Objective-C
@@ -110,7 +149,17 @@ macro objectiveClass*(nameExpr: untyped, decls: untyped): untyped =
     (className, superName) = makeClassNames(nameExpr)
     typeDecl = makeClassTypeDecl(className, superName, decls)
     classVariable = makeClassVariable(className, superName, decls)
-  return newTree(nnkStmtList, typeDecl, classVariable)
+    classUtilities = makeClassUtils(className, superName)
+  result = newTree(nnkStmtList, typeDecl, classVariable, classUtilities)
+
+macro importClass*(nameExpr: untyped, decls: untyped): untyped =
+  ## Imports an existing Objective-C class and generates types for it.
+  ## TODO
+  let
+    (className, superName) = makeClassNames(nameExpr)
+    typeDecl = makeClassTypeDecl(className, superName, decls)
+    classUtilities = makeClassUtils(className, superName)
+  result = newTree(nnkStmtList, typeDecl, classUtilities)
 
 macro objectiveProtocol*(nameExpr: untyped, decls: untyped): untyped =
   ## Creates concepts, variables and procedures for an Objective-C
@@ -130,7 +179,17 @@ converter toProtocol*[T](x: T): int =
 when isMainModule:
   objectiveClass TestRoot:
     c: float
-  objectiveClass Test of TestRoot:
+  importClass NSObject:
+    isa: Class
+  objectiveClass Test of NSObject:
     a: int
-
-  echo encode(Test.classType)
+  proc helloTest(self: Test): Test {. objectiveMethod .} =
+    echo "hello Test"
+    result = self
+  proc main =
+    var test = newTest()
+    let obj: Object = test
+    discard obj.helloTest()
+    #test.id = Id nil
+  main()
+  GC_fullcollect()
