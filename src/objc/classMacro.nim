@@ -43,6 +43,35 @@ proc makeClassVariable(class, super: NimNode): NimNode =
       class(`className`)
     template `converterName`*(cls: `class`): Id = cast[Id](cls)
 
+macro alignof(typ: typed): untyped =
+  ## Emits code to compute the alignment of a Nim type.
+  ## TODO: WIP
+
+macro encode(typ: typed): untyped =
+  ## Emits code to encode a Nim type into an Objective-C type encoding.
+  ## TODO: WIP
+
+proc makeSingleIvar(decl: NimNode): NimNode =
+  ## Creates an Objective-C runtime call adding an Ivar corresponding to
+  ## ``decl`` to the class ``class``.
+  let
+    className = ident"theClass"
+    ivarName = decl[0].toStrLit
+    ivarType = decl[1][0]
+    alignofProc = bindsym"alignof"
+    encodeMacro = bindsym"encode"
+  result = quote do:
+    `className`.addIvar(`ivarName`, sizeof(`ivarType`),
+                        `alignofProc`(`ivarType`),
+                        `encodeMacro`(`ivarType`))
+
+proc makeClassIvars(decls: NimNode): NimNode =
+  ## Creates the Objective-C runtime calls necessary to bind Ivars corresponding
+  ## to the field declarations in decls to an Objective-C class object.
+  var ivars = newNimNode(nnkStmtList)
+  for decl in decls:
+    ivars.add makeSingleIvar(decl)
+
 macro objectiveClass*(nameExpr: untyped, decls: untyped): untyped =
   ## Creates types, variables and procedures for an Objective-C
   ## class from a declarative DSL:
@@ -70,12 +99,19 @@ macro objectiveProperty*(nameExpr: untyped, procedure: untyped): untyped =
   ## given a procedure implementing that property.
   discard
 
-converter toProtocol*[T: AbstractProtocol](x: T): int =
+converter toProtocol*[T](x: T): int =
   ## Converts a concrete Objective-C class type to a protocol type
   ## it conforms to. TODO in macro.
   discard
 
-objectiveClass Test of NSObject:
-  a: int
-objectiveClass TestRoot:
-  c: float
+when isMainModule:
+  objectiveClass Test of NSObject:
+    a: int
+  objectiveClass TestRoot:
+    c: float
+
+  type
+    Test = object
+      a, b: int
+
+  encode(Test)
