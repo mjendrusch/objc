@@ -1,9 +1,5 @@
-import objc.base, objc.hli, objc.typeEncoding
+import objc.base, objc.hli, objc.typeEncoding, objc.macroCommons
 import macros
-
-type
-  Object* = ref object of RootObj
-    id: Id
 
 proc makeClassNames(nameExpr: NimNode): tuple[class, super: NimNode] =
   ## Gets identifiers for super class and new class from a
