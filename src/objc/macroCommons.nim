@@ -39,6 +39,8 @@ iterator supers*(typ: NimNode): NimNode =
 proc isClass*(typ: NimNode): bool =
   ## Checks, whether an object type represents an Objective-C class.
   result = false
+  if typ.kind notin {nnkObjectTy, nnkRefTy}:
+    return false
   for super in typ.supers:
     if super.eqIdent "ClassType":
       return true
@@ -46,6 +48,8 @@ proc isClass*(typ: NimNode): bool =
 proc isObject*(typ: NimNode): bool =
   ## Checks, whether an object type represents an Objective-C object.
   result = false
+  if typ.kind notin {nnkObjectTy, nnkRefTy}:
+    return false
   for super in typ.supers:
     if super.eqIdent "Object":
       return true

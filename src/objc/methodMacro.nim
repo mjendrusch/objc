@@ -59,7 +59,6 @@ proc genMethodProc(procedure, name: NimNode): NimNode =
           quote do:
             `call`.id
           ))
-      discard
     else:
       result[6] = newTree(nnkStmtList,
         newTree(nnkAsgn, ident"result", call))
@@ -101,6 +100,12 @@ proc makeImportMethodCallArgs*(args: NimNode): NimNode =
             identifier
       result.add callArg
 
+template stretInsanity(typ: untyped; size: int): untyped =
+  if sizeof(typ) <= size:
+    cast[pointer](objcMsgSend)
+  else:
+    cast[pointer](objcMsgSendStret)
+
 macro importMethod*(messageName: static[string]; procedure: typed): untyped =
   ## Creates Objective-C bindings for a procedure prototype.
   let
@@ -124,12 +129,38 @@ macro importMethod*(messageName: static[string]; procedure: typed): untyped =
                         {. varargs, cdecl .}](objcMsgSendFpRet)
       return `funp`(`self`, $$`messageName`, `callArgs`)
   elif returnType.typeKind in {ntyTuple, ntyObject}:
+    # XXX: this is insane!
+    # We are choosing whether to use objcMsgSend or objcMsgSendStret, depending
+    # on the target architecture and object size.
+    var
+      whichMsgSend = bindsym"objcMsgSendStret"
+      stretTemplate = bindsym"stretInsanity"
+    case hostCPU
+    of "amd64", "powerpc64", "arm64":
+      whichMsgSend = quote do:
+        `stretTemplate`(`returnType`, 16)
+    of "i386":
+      whichMsgSend = quote do:
+        `stretTemplate`(`returnType`, 8)
+    of "powerpc":
+      whichMsgSend = quote do:
+        `stretTemplate`(`returnType`, 0)
+    of "arm":
+      whichMsgSend = quote do:
+        `stretTemplate`(`returnType`, 4)
+    else:
+      discard
     result[6] = quote do:
       let `funp` = cast[proc(self: Id; sel: Selector): `returnType`
-                        {. varargs, cdecl .}](objcMsgSendStRet)
+                        {. varargs, cdecl .}](`whichMsgSend`)
       return `funp`(`self`, $$`messageName`, `callArgs`)
   elif returnType.getTypeImpl.isObject:
     let
       newResult = ident("new" & $selfType.symbol)
     result[6] = quote do:
       `newResult`(objcMsgSend(`self`, $$`messageName`, `callArgs`))
+  else:
+    result[6] = quote do:
+      let `funp` = cast[proc(self: Id; sel: Selector): `returnType`
+                        {. varargs, cdecl .}](objcMsgSend)
+      return `funp`(`self`, $$`messageName`, `callArgs`)

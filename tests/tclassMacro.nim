@@ -1,4 +1,4 @@
-import objc.base, objc.hli, objc.macroCommons, objc.classMacro
+import objc
 import unittest
 
 importClass NSObject

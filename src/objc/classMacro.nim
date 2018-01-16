@@ -111,8 +111,6 @@ proc makeClassUtils*(className, superName: NimNode): NimNode =
     classString = className.toStrLit
     newClass = ident("new" & $className.ident)
   result = quote do:
-    static:
-      echo `classString`
     template `classProcName`*(cls: `className`): `classType` =
       class(`classString`)
     template `classProcName`*(clsType: typedesc[`className`]): `classType` =
@@ -199,25 +197,3 @@ converter toProtocol*[T](x: T): int =
   ## Converts a concrete Objective-C class type to a protocol type
   ## it conforms to. TODO in macro.
   discard
-
-when isMainModule:
-  objectiveClass TestRoot:
-    c: float
-  importClass NSObject:
-    isa: Class
-  objectiveClass Test of NSObject:
-    a: int
-  proc helloTest(self: Test): Test {. objectiveMethod .} =
-    echo "hello Test"
-    result = self
-  objectiveClass TestImport of Test
-  proc helloTest(self: TestImport): TestImport {. importMethod: "helloTest" .}
-  proc main =
-    var test = newTest()
-    let obj = newObject(test.id)
-    discard obj.helloTest().helloTest().helloTest()
-    GC_fullcollect()
-    let ti = newTestImport()
-    discard ti.helloTest()
-  main()
-  GC_fullcollect()
