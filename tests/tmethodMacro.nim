@@ -35,6 +35,8 @@ suite "method macro":
       return 3.14
     proc returnsTest(self: Test): Test {. objectiveMethod .} =
       return self
+    proc returnsTest(self: Test, arg: int): cint {. objectiveMethod .} =
+      return arg.cint
     proc returnsStruct4(self: Test): Struct4 {. objectiveMethod .} =
       return Struct4()
     proc returnsStruct8(self: Test): Struct8 {. objectiveMethod .} =
@@ -82,8 +84,9 @@ suite "method macro":
     check structF24.f == 0'f64
 
   test "import method":
-    proc anotherFloat(self: Inherit): float {. importMethod: "returnsFloat" .}
-    proc returnsInherit(self: Inherit): Inherit {. importMethod: "returnsTest" .}
+    proc anotherFloat(self: Inherit): float {. importMangle: "returnsFloat" .}
+    proc returnsInherit(self: Inherit): Inherit {. importMangle: "returnsTest" .}
+    proc returnsInherit(self: Inherit; arg: int): cint {. importMangle: "returnsTest" .}
     proc anotherStruct4(self: Inherit): Struct4 {. importMethod: "returnsStruct4" .}
     proc anotherStruct8(self: Inherit): Struct8 {. importMethod: "returnsStruct8" .}
     proc anotherStruct16(self: Inherit): Struct16 {. importMethod: "returnsStruct16" .}
@@ -97,6 +100,7 @@ suite "method macro":
     let
       inh = newInherit()
       returned = inh.returnsInherit
+      returnedOverload = inh.returnsInherit(42)
       struct4 = inh.anotherStruct4
       struct8 = inh.anotherStruct8
       struct16 = inh.anotherStruct16
@@ -109,6 +113,7 @@ suite "method macro":
       structF24 = inh.anotherStructF24
     check inh.anotherFloat == 3.14
     check inh.id == returned.id
+    check returnedOverload == 42
     check struct4.f == 0
     check struct8.f == 0
     check struct16.f == 0

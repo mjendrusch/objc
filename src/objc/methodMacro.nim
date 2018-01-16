@@ -1,12 +1,43 @@
 import objc.base, objc.macroCommons, objc.typeEncoding
 import macros
 
-proc genMethodSelector(procedure: NimNode): NimNode =
+proc genMethodArgTypes(procedure: NimNode): seq[NimNode] =
+  ## Generates a sequence of argument types for an Objective-C method.
+  var
+    args = procedure[3]
+  result = newSeq[NimNode]()
+  for idx in 2 ..< args.len:
+    let
+      identDef = args[idx]
+      defType = identDef[^2]
+      defLen = identDef.len - 2
+    for idy in 0 ..< defLen:
+      result.add defType
+
+proc mangleMethodSelector(name: string; types: seq[NimNode]): string =
+  ## Mangles a procedure name given a list of types, to create an easily
+  ## reproducible, yet overloadable method selector.
+  result = name
+  for typ in types:
+    result.add ":" & $toStrLit(typ)
+
+proc mangleMethodSelector(procedure: NimNode): NimNode =
+  ## Mangles a procedure name to produce an easily reproducible,
+  ## yet overloadable method selector.
+  var
+    types = genMethodArgTypes(procedure)
+    mangledName = $procedure[0].symbol
+  result = newStrLitNode(mangleMethodSelector(mangledName, types))
+
+proc genMethodSelector(procedure: NimNode; name: string = nil): NimNode =
   ## Generates a unique selector name for a procedure, given its arguments.
   let
     mangledSelector = gensym(nskProc)
-    symbol = procedure[0]
-    symbolString = symbol.toStrLit
+    symbolString =
+      if name.isNil:
+        mangleMethodSelector(procedure)
+      else:
+        newStrLitNode(name)
   result = quote do:
     proc `mangledSelector`: string {. inline .} =
       var res {. exportc .} = cstring""
@@ -63,13 +94,28 @@ proc genMethodProc(procedure, name: NimNode): NimNode =
       result[6] = newTree(nnkStmtList,
         newTree(nnkAsgn, ident"result", call))
 
+# macro objectiveMethod*(importString: typed; procedure: typed): untyped =
+#   ## Adds a procedure to an Objective-C runtime class.
+#   let
+#     class = procedure[3][1][^2]
+#     procName = gensym(nskProc)
+#     methodProcedure = genMethodProc(procedure, procName)
+#     methodSelector = genMethodSelector(procedure, importString.strVal)
+#     encoding = genProcEncoding(methodProcedure)
+#     implementation = bindsym"Implementation"
+#   result = quote do:
+#     `methodProcedure`
+#     discard addMethod(`class`.class, $$`methodSelector`,
+#                       cast[`implementation`](`procName`),
+#                       `encoding`)
+
 macro objectiveMethod*(procedure: typed): untyped =
   ## Adds a procedure to an Objective-C runtime class.
   let
     class = procedure[3][1][^2]
     procName = gensym(nskProc)
     methodProcedure = genMethodProc(procedure, procName)
-    methodSelector = genMethodSelector(procedure)
+    methodSelector = genMethodSelector(procedure, nil)
     encoding = genProcEncoding(methodProcedure)
     implementation = bindsym"Implementation"
   result = quote do:
@@ -82,7 +128,7 @@ proc makeImportMethodCallArgs*(args: NimNode): NimNode =
   ## Creates the call arguments for the static method call of an imported
   ## method.
   result = newTree(nnkArglist)
-  for idx in 1 ..< args.len:
+  for idx in 2 ..< args.len:
     let
       identDef = args[idx]
       defType = identDef[^2]
@@ -106,8 +152,8 @@ template stretInsanity(typ: untyped; size: int): untyped =
   else:
     cast[pointer](objcMsgSendStret)
 
-macro importMethod*(messageName: static[string]; procedure: typed): untyped =
-  ## Creates Objective-C bindings for a procedure prototype.
+proc importMethodImpl(messageName: string; procedure: NimNode): NimNode =
+  ## Implements Objective-C runtime method import.
   let
     args = procedure[3]
     self = newTree(nnkDotExpr,
@@ -164,3 +210,30 @@ macro importMethod*(messageName: static[string]; procedure: typed): untyped =
       let `funp` = cast[proc(self: Id; sel: Selector): `returnType`
                         {. varargs, cdecl .}](objcMsgSend)
       return `funp`(`self`, $$`messageName`, `callArgs`)
+
+macro importMethod*(messageName: static[string]; procedure: typed): untyped =
+  ## Creates Objective-C bindings for a procedure prototype.
+  result = importMethodImpl(messageName, procedure)
+
+macro importMethodAuto*(procedure: typed): untyped =
+  ## Creates Objective-C bindings for a procedure prototype.
+  let
+    messageName = $procedure[0].symbol
+  result = importMethodImpl(messageName, procedure)
+
+macro importMangle*(messageName: static[string]; procedure: typed): untyped =
+  ## Creates Objective-C bindings for a procedure prototype, automatically
+  ## mangling the message name.
+  let
+    mangledName = mangleMethodSelector(messageName,
+                                       genMethodArgTypes(procedure))
+  result = importMethodImpl(mangledName, procedure)
+
+macro importMangleAuto*(procedure: typed): untyped =
+  ## Creates Objective-C bindings for a procedure prototype, automatically
+  ## mangling the message name.
+  let
+    messageName = $procedure[0].symbol
+    mangledName = mangleMethodSelector(messageName,
+                                       genMethodArgTypes(procedure))
+  result = importMethodImpl(mangledName, procedure)
