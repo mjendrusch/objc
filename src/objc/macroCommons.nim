@@ -54,7 +54,7 @@ proc isObject*(typ: NimNode): bool =
     if super.eqIdent "Object":
       return true
 
-proc dispose(obj: Object) =
+proc objectDispose*(obj: Object) =
   ## Disposes a Object, by releasing its Id.
   when defined(objcDebugAlloc):
     echo "RELEASED (Object): ", repr(cast[pointer](obj.id))
@@ -62,7 +62,7 @@ proc dispose(obj: Object) =
 
 proc newObject*(id: Id): Object =
   ## Creates a new Object from an Id by retaining that Id.
-  new result, dispose
+  new result, objectDispose
   result.id = id
   when defined(objcDebugAlloc):
     echo "RETAINED (Object): ", repr(cast[pointer](id))

@@ -1,7 +1,7 @@
 import objc.base, objc.macroCommons, objc.typeEncoding
 import macros
 
-proc genMethodArgTypes(procedure: NimNode): seq[NimNode] =
+proc genMethodArgTypes*(procedure: NimNode): seq[NimNode] =
   ## Generates a sequence of argument types for an Objective-C method.
   var
     args = procedure[3]
@@ -14,14 +14,14 @@ proc genMethodArgTypes(procedure: NimNode): seq[NimNode] =
     for idy in 0 ..< defLen:
       result.add defType
 
-proc mangleMethodSelector(name: string; types: seq[NimNode]): string =
+proc mangleMethodSelector*(name: string; types: seq[NimNode]): string =
   ## Mangles a procedure name given a list of types, to create an easily
   ## reproducible, yet overloadable method selector.
   result = name
   for typ in types:
     result.add ":" & $toStrLit(typ)
 
-proc mangleMethodSelector(procedure: NimNode): NimNode =
+proc mangleMethodSelector*(procedure: NimNode): NimNode =
   ## Mangles a procedure name to produce an easily reproducible,
   ## yet overloadable method selector.
   var
