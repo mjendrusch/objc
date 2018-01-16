@@ -18,9 +18,13 @@ type
 iterator supers*(typ: NimNode): NimNode =
   ## Iterates over all super types of a given object type
   ## represented by a NimNode.
-  assert typ.kind == nnkObjectTy
+  assert typ.kind in {nnkObjectTy, nnkRefTy}
   var
-    lastInherit = typ[1]
+    lastInherit =
+      if typ.kind == nnkRefTy:
+        typ[0].getTypeImpl[1]
+      else:
+        typ[1]
   while lastInherit.kind == nnkOfInherit:
     yield lastInherit[0]
     if lastInherit[0].eqIdent "RootObj":
@@ -48,10 +52,14 @@ proc isObject*(typ: NimNode): bool =
 
 proc dispose(obj: Object) =
   ## Disposes a Object, by releasing its Id.
+  when defined(objcDebugAlloc):
+    echo "RELEASED (Object): ", repr(cast[pointer](obj.id))
   discard objcMsgSend(obj.id, $$"release")
 
 proc newObject*(id: Id): Object =
   ## Creates a new Object from an Id by retaining that Id.
   new result, dispose
   result.id = id
+  when defined(objcDebugAlloc):
+    echo "RETAINED (Object): ", repr(cast[pointer](id))
   discard objcMsgSend(result.id, $$"retain")

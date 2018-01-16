@@ -25,6 +25,8 @@ proc makeClassTypeDecl(class, super, decls: NimNode): NimNode =
         `class`* = ref `classObject`
       template classType*(typ: typedesc[`class`]): untyped = `className`
       template metaClassType*(typ: typedesc[`class`]): untyped = `metaClassName`
+      template classType*(typ: `class`): untyped = `className`
+      template metaClassType*(typ: `class`): untyped = `metaClassName`
   else:
     let
       superClassName = ident($super.ident & "Class")
@@ -34,8 +36,12 @@ proc makeClassTypeDecl(class, super, decls: NimNode): NimNode =
         `metaClassName`* = object of `superMetaClassName`
         `className`* = object of `superClassName`
         `class`* = ref object of `super`
+      template superClassType*(typ: typedesc[`class`]): untyped = `superClassName`
       template classType*(typ: typedesc[`class`]): untyped = `className`
       template metaClassType*(typ: typedesc[`class`]): untyped = `metaClassName`
+      template superClassType*(typ: `class`): untyped = `superClassName`
+      template classType*(typ: `class`): untyped = `className`
+      template metaClassType*(typ: `class`): untyped = `metaClassName`
   var
     typeDecl = result[0][1]
   typeDecl[^1][^1] = newNimNode(nnkRecList)
@@ -84,9 +90,6 @@ proc makeClassVariable(class, super, decls: NimNode): NimNode =
         newStrLitNode("nil")
       else:
         super.toStrLit
-    procName = ident"class"
-    converterName = ident"dyn"
-    classType = bindsym"Class"
     addAllIvars = makeClassIvars(decls, theClass)
   result = quote do:
     block:
@@ -101,16 +104,27 @@ proc makeClassVariable(class, super, decls: NimNode): NimNode =
 proc makeClassUtils*(className, superName: NimNode): NimNode =
   ## Creates utility templates, procedures and converters for a given class.
   let
-    procName = ident"class"
+    classProcName = ident"class"
+    superProcName = ident"super"
     converterName = ident"dyn"
     classType = bindsym"Class"
     classString = className.toStrLit
     newClass = ident("new" & $className.ident)
   result = quote do:
-    template `procName`*(clsType: typedesc[`className`]): `classType` =
+    static:
+      echo `classString`
+    template `classProcName`*(cls: `className`): `classType` =
       class(`classString`)
+    template `classProcName`*(clsType: typedesc[`className`]): `classType` =
+      class(`classString`)
+    template `superProcName`*(cls: `className`): `classType` =
+      class(`classString`).super
+    template `superProcName`*(clsType: typedesc[`className`]): `classType` =
+      class(`classString`).super
     template `converterName`*(cls: `className`): Id = cls.id
     proc standardDispose(cls: `className`) =
+      when defined(objcDebugAlloc):
+        echo "RELEASED ", repr(cast[pointer](cls.id))
       discard objcMsgSend(cls.id, $$"release")
     proc `newClass`*: `className` =
       var res: `className`
@@ -119,24 +133,17 @@ proc makeClassUtils*(className, superName: NimNode): NimNode =
         objcMsgSend(`className`.class.Id,
                     $$"alloc"),
         $$"init")
+      when defined(objcDebugAlloc):
+        echo "ALLOCATED ", `classString`, ": ", repr(cast[pointer](res.id))
       res
     proc `newClass`*(id: Id): `className` =
       var res: `className`
       new res, standardDispose
       res.id = id
+      when defined(objcDebugAlloc):
+        echo "RETAINED ", `classString`, ": ", repr(cast[pointer](res.id))
       discard objcMsgSend(id, $$"retain")
       res
-    # proc `newClass`*(dispose: proc(cls: `className`)): `className` =
-    #   proc fullDispose(cls: `className`) =
-    #     standardDispose(cls)
-    #     dispose(cls)
-    #   var res: `className`
-    #   new res, fullDispose
-    #   res.id = objcMsgSend(
-    #     objcMsgSend(`className`.class.Id,
-    #                 $$"alloc"),
-    #     $$"init")
-    #   res
 
 macro objectiveClass*(nameExpr: untyped, decls: untyped): untyped =
   ## Creates types, variables and procedures for an Objective-C
@@ -152,12 +159,29 @@ macro objectiveClass*(nameExpr: untyped, decls: untyped): untyped =
     classUtilities = makeClassUtils(className, superName)
   result = newTree(nnkStmtList, typeDecl, classVariable, classUtilities)
 
+macro objectiveClass*(nameExpr: untyped): untyped =
+  ## Creates types, variables and procedures for an Objective-C
+  ## class without member fields.
+  let
+    (className, superName) = makeClassNames(nameExpr)
+    typeDecl = makeClassTypeDecl(className, superName, newEmptyNode())
+    classVariable = makeClassVariable(className, superName, newEmptyNode())
+    classUtilities = makeClassUtils(className, superName)
+  result = newTree(nnkStmtList, typeDecl, classVariable, classUtilities)
+
 macro importClass*(nameExpr: untyped, decls: untyped): untyped =
   ## Imports an existing Objective-C class and generates types for it.
-  ## TODO
   let
     (className, superName) = makeClassNames(nameExpr)
     typeDecl = makeClassTypeDecl(className, superName, decls)
+    classUtilities = makeClassUtils(className, superName)
+  result = newTree(nnkStmtList, typeDecl, classUtilities)
+
+macro importClass*(nameExpr: untyped): untyped =
+  ## Imports an existing Objective-C class and generates types for it.
+  let
+    (className, superName) = makeClassNames(nameExpr)
+    typeDecl = makeClassTypeDecl(className, superName, newEmptyNode())
     classUtilities = makeClassUtils(className, superName)
   result = newTree(nnkStmtList, typeDecl, classUtilities)
 
@@ -186,10 +210,14 @@ when isMainModule:
   proc helloTest(self: Test): Test {. objectiveMethod .} =
     echo "hello Test"
     result = self
+  objectiveClass TestImport of Test
+  proc helloTest(self: TestImport): TestImport {. importMethod: "helloTest" .}
   proc main =
     var test = newTest()
-    let obj: Object = test
-    discard obj.helloTest()
-    #test.id = Id nil
+    let obj = newObject(test.id)
+    discard obj.helloTest().helloTest().helloTest()
+    GC_fullcollect()
+    let ti = newTestImport()
+    discard ti.helloTest()
   main()
   GC_fullcollect()
