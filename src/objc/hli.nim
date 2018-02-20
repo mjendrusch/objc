@@ -1,5 +1,9 @@
 import objc.base, objc.cutils
 
+template `==`*(c1, c2: Class): bool =
+  ## Equality operator for `Class`.
+  pointer(c1) == pointer(c2)
+
 proc name*(cls: Class): string =
   result = $class_getName(cls)
 
@@ -140,6 +144,10 @@ template constructInstance*(cls: Class; bytes: pointer): untyped =
 
 template destructInstance*(obj: Id): untyped =
   objc_destructInstance(obj)
+
+template `==`*(i1, i2: Id): bool =
+  ## Equality operator for `Id`.
+  pointer(i1) == pointer(i2)
 
 template copy*(obj: Id; size: csize): untyped =
   object_copy(obj, size.csize)

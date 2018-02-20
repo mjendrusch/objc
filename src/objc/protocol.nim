@@ -62,7 +62,7 @@ proc genImportMethods(methods: seq[NimNode]): NimNode =
   for mtd in methods:
     var
       newMethod = mtd.copyNimTree
-    newMethod[4].add(newTree(nnkPragma, bindsym"importMangleAuto"))
+    newMethod[4] = newTree(nnkPragma, bindsym"importMangleAuto")
     result.add(newMethod)
 
 macro objectiveProtocol*(nameExpr: untyped; body: typed): untyped =

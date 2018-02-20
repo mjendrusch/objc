@@ -1,1 +1,1 @@
-import tclassMacro, tmethodMacro, ttypeEncoding
+import tclassMacro, tmethodMacro, ttypeEncoding, tfoundation, tprotocol

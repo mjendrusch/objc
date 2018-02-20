@@ -3,6 +3,7 @@ import macros
 
 type
   ClassType* = object {. inheritable .}
+    class*: Class
   MetaClassType* = object {. inheritable .}
   Object* = ref object of RootObj
     id*: Id
@@ -54,6 +55,8 @@ proc isObject*(typ: NimNode): bool =
   result = false
   if typ.kind notin {nnkObjectTy, nnkRefTy}:
     return false
+  if typ[0].eqIdent "Object:ObjectType":
+    return true
   for super in typ.supers:
     if super.eqIdent "Object":
       return true

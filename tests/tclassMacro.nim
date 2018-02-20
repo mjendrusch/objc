@@ -10,6 +10,8 @@ objectiveClass RootFieldsTest of NSObject:
 objectiveClass InheritNoFieldsTest of RootFieldsTest
 objectiveClass InheritFieldsTest of RootFieldsTest:
   c: float
+objectiveClass GenericTest[T, U]
+objectiveClass MoreGenerics[T] of GenericTest[T, T]
 
 {. push hint[XDeclaredButNotUsed]:off .}
 

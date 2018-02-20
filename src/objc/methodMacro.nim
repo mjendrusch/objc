@@ -89,7 +89,8 @@ proc genMethodProc(procedure, name: NimNode): NimNode =
           ident"result",
           quote do:
             `call`.id
-          ))
+        )
+      )
     else:
       result[6] = newTree(nnkStmtList,
         newTree(nnkAsgn, ident"result", call))
@@ -124,10 +125,13 @@ macro objectiveMethod*(procedure: typed): untyped =
                       cast[`implementation`](`procName`),
                       `encoding`)
 
-proc makeImportMethodCallArgs*(args: NimNode): NimNode =
+proc makeImportMethodCallArgs*(args: NimNode): tuple[args, types: NimNode] =
   ## Creates the call arguments for the static method call of an imported
   ## method.
-  result = newTree(nnkArglist)
+  result.args = newTree(nnkArgList)
+  result.types = newTree(nnkArgList)
+  result.types.add newTree(nnkIdentDefs, ident"self", bindsym"Id", newEmptyNode())
+  result.types.add newTree(nnkIdentDefs, ident"sel", bindsym"Selector", newEmptyNode())
   for idx in 2 ..< args.len:
     let
       identDef = args[idx]
@@ -136,6 +140,7 @@ proc makeImportMethodCallArgs*(args: NimNode): NimNode =
       isAClass = defType.getTypeImpl.isClass
     for idy in 0 ..< identDef.len - 2:
       let
+        param = gensym(nskParam, "arg//" & $idx & "//" & $idy)
         identifier = identDef[idy]
         callArg =
           if isAnObject:
@@ -144,7 +149,15 @@ proc makeImportMethodCallArgs*(args: NimNode): NimNode =
             newTree(nnkDotExpr, identifier, ident"class") # FIXME
           else:
             identifier
-      result.add callArg
+        argType =
+          if isAnObject:
+            newTree(nnkIdentDefs, param, ident"Id", newEmptyNode())
+          elif isAClass:
+            newTree(nnkIdentDefs, param, ident"Class", newEmptyNode())
+          else:
+            newTree(nnkIdentDefs, param, defType, newEmptyNode())
+      result.args.add callArg
+      result.types.add argType
 
 template stretInsanity(typ: untyped; size: int): untyped =
   if sizeof(typ) <= size:
@@ -159,20 +172,32 @@ proc importMethodImpl(messageName: string; procedure: NimNode): NimNode =
     self = newTree(nnkDotExpr,
       args[1][0].copyNimTree,
       ident"id")
-    selfType = args[1][^2]
     returnType = args[0]
-    funp = gensym(nskLet)
-    callArgs = makeImportMethodCallArgs(args)
-
+    (callArgs, callArgTypes) = makeImportMethodCallArgs(args)
+    castType = newTree(nnkProcTy,
+      block:
+        var tree = newTree(nnkFormalParams, returnType)
+        for child in callArgTypes.children:
+          tree.add child
+        if returnType.getTypeImpl.isObject:
+          tree[0] = bindsym"Id"
+        tree,
+      newTree(nnkPragma, ident"cdecl")
+    )
   result = procedure.copyNimTree
+
+  # Gets rid of the GenericArgs node.
+  result[2] = newEmptyNode() # TODO: generalize to only remove certain generics.
+
   if returnType == bindsym"void":
     result[6] = quote do:
       discard objcMsgSend(`self`, $$`messageName`, `callArgs`)
   elif returnType == bindsym"float" or returnType == bindsym"float32" or
        returnType == bindsym"float64":
+    let
+      funp = gensym(nskLet)
     result[6] = quote do:
-      let `funp` = cast[proc(self: Id; sel: Selector): `returnType`
-                        {. varargs, cdecl .}](objcMsgSendFpRet)
+      let `funp` = cast[`castType`](objcMsgSendFpRet)
       return `funp`(`self`, $$`messageName`, `callArgs`)
   elif returnType.typeKind in {ntyTuple, ntyObject}:
     # XXX: this is insane!
@@ -196,19 +221,23 @@ proc importMethodImpl(messageName: string; procedure: NimNode): NimNode =
         `stretTemplate`(`returnType`, 4)
     else:
       discard
+    let
+      funp = gensym(nskLet)
     result[6] = quote do:
-      let `funp` = cast[proc(self: Id; sel: Selector): `returnType`
-                        {. varargs, cdecl .}](`whichMsgSend`)
+      let `funp` = cast[`castType`](`whichMsgSend`)
       return `funp`(`self`, $$`messageName`, `callArgs`)
   elif returnType.getTypeImpl.isObject:
     let
-      newResult = ident("new" & $selfType.symbol)
+      newResult = ident("new" & $returnType.symbol)
+      funp = gensym(nskLet)
     result[6] = quote do:
-      `newResult`(objcMsgSend(`self`, $$`messageName`, `callArgs`))
+      let `funp` = cast[`castType`](objcMsgSend)
+      `newResult`(`funp`(`self`, $$`messageName`, `callArgs`))
   else:
+    let
+      funp = gensym(nskLet)
     result[6] = quote do:
-      let `funp` = cast[proc(self: Id; sel: Selector): `returnType`
-                        {. varargs, cdecl .}](objcMsgSend)
+      let `funp` = cast[`castType`](objcMsgSend)
       return `funp`(`self`, $$`messageName`, `callArgs`)
 
 macro importMethod*(messageName: static[string]; procedure: typed): untyped =

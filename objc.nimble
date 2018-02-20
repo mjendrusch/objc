@@ -14,6 +14,7 @@ requires "nim >= 0.17.3"
 
 proc testDebugConfig() =
   --define: debug
+  --define: objcStrict
   --path: "../src"
   --run
 

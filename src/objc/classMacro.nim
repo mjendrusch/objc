@@ -1,16 +1,55 @@
 import objc.base, objc.hli, objc.typeEncoding, objc.macroCommons, objc.methodCallMacro, objc.methodMacro
 import macros
 
-proc makeClassNames(nameExpr: NimNode): tuple[class, super: NimNode] =
+proc makeClassNames(nameExpr: NimNode): tuple[class, super, classArgs, superArgs: NimNode] =
   ## Gets identifiers for super class and new class from a
   ## class name expression.
-  if nameExpr.kind == nnkInfix:
-    return (nameExpr[1], nameExpr[2])
+  result.classArgs = newNimNode(nnkArgList)
+  result.superArgs = newNimNode(nnkArgList)
+  case nameExpr.kind
+  of nnkInfix:
+    let
+      classExpr = nameExpr[1]
+      superExpr = nameExpr[2]
+    case classExpr.kind
+    of nnkBracketExpr:
+      result.class = classExpr[0]
+      for idx in 1 ..< classExpr.len:
+        result.classArgs.add classExpr[idx]
+    of nnkIdent:
+      result.class = classExpr
+    else:
+      error("Invalid objective-C class declaration. Class name is not identifier or bracket expression!")
+    case superExpr.kind
+    of nnkBracketExpr:
+      result.super = superExpr[0]
+      for idx in 1 ..< superExpr.len:
+        result.superArgs.add superExpr[idx]
+    of nnkIdent:
+      result.super = superExpr
+    else:
+      error("Invalid Objective-C class declaration. Super class name is not identifier or bracket expression!")
+  of nnkIdent:
+    result.class = nameExpr
+  of nnkBracketExpr:
+    result.class = nameExpr[0]
+    for idx in 1 ..< nameExpr.len:
+      result.classArgs.add nameExpr[idx]
   else:
-    return (nameExpr, nil)
+    error("Invalid Objective-C class declaration. Class is not identifier, bracket expression or infix expression!")
 
-proc makeClassTypeDecl(class, super, decls: NimNode): NimNode =
-  ## Creates type declarations for classes based on their
+proc removeTypeQualifiers(arglist: NimNode): NimNode =
+  ## Removes all type qualifier-like expressions from an arglist.
+  proc recurse(node: NimNode): NimNode =
+    if node.kind == nnkExprColonExpr:
+      return node[0]
+    result = node.copyNimNode
+    for child in node.children:
+      result.add recurse(child)
+  result = recurse arglist
+
+proc makeExplicitClassTypeDecl(class, super, decls: NimNode): NimNode =
+  ## Generates type declarations for non-generic classes based on their
   ## name and the name of their superclass, if any.
   let
     className = ident($class.ident & "Class")
@@ -48,6 +87,69 @@ proc makeClassTypeDecl(class, super, decls: NimNode): NimNode =
   for decl in decls:
     typeDecl[^1][^1].add newTree(nnkIdentDefs,
       decl[0], decl[1][0], newEmptyNode())
+
+proc makeGenericClassTypeDecl(class, super,
+                              classArgs, superArgs,
+                              decls: NimNode): NimNode =
+  ## Generates type declarations for generic classes.
+  let
+    rhsClassArgs = removeTypeQualifiers(classArgs)
+    className = ident($class.ident & "Class")
+    classGenericName = ident($class.ident & "Generic")
+    classGenericClassName = ident($class.ident & "GenericClass")
+    classGenericObjectName = ident($class.ident & "GenericObj")
+    classObject = ident($class.ident & "Obj")
+    metaClassName = ident($class.ident & "MetaClass")
+  if super.isNil:
+    result = quote do:
+      type
+        `metaClassName`* = object of MetaClassType
+        `classGenericClassName`* = object of ClassType
+        `className`*[`classArgs`] = object of `classGenericClassName`
+        `classGenericObjectName`* = object of Object
+        `classObject`*[`classArgs`] = object of `classGenericObjectName`
+        `classGenericName`* = ref `classGenericObjectName`
+        `class`*[`classArgs`] = ref `classObject`[`rhsClassArgs`]
+      template classType*(typ: typedesc[`class`]): untyped = `classGenericName`
+      template metaClassType*(typ: typedesc[`class`]): untyped = `metaClassName`
+      template classType*(typ: `class`): untyped = `classGenericName`
+      template metaClassType*(typ: `class`): untyped = `metaClassName`
+  else:
+    let
+      rhsSuperArgs = removeTypeQualifiers(superArgs)
+      superClassName = ident($super.ident & "Class")
+      superGenericName = ident($super.ident & "Generic")
+      superGenericClassName = ident($super.ident & "GenericClass")
+      superMetaClassName = ident($super.ident & "MetaClass")
+    result = quote do:
+      type
+        `metaClassName`* = object of `superMetaClassName`
+        `classGenericClassName`* = object of `superGenericClassName`
+        `className`*[`classArgs`] = object of `superClassName`[`rhsSuperArgs`]
+        `classGenericName`* = ref object of `superGenericName`
+        `class`*[`classArgs`] = ref object of `super`[`rhsSuperArgs`]
+      template superClassType*(typ: typedesc[`class`]): untyped = `superClassName`
+      template classType*(typ: typedesc[`class`]): untyped = `className`
+      template metaClassType*(typ: typedesc[`class`]): untyped = `metaClassName`
+      template superClassType*(typ: `class`): untyped = `superClassName`
+      template classType*(typ: `class`): untyped = `className`
+      template metaClassType*(typ: `class`): untyped = `metaClassName`
+  var
+    typeDecl = result[0][1]
+  typeDecl[^1][^1] = newNimNode(nnkRecList)
+  for decl in decls:
+    typeDecl[^1][^1].add newTree(nnkIdentDefs,
+      decl[0], decl[1][0], newEmptyNode())
+
+proc makeClassTypeDecl(class, super,
+                       classArgs, superArgs,
+                       decls: NimNode): NimNode =
+  ## Creates type declarations for classes based on their
+  ## name and the name of their superclass, if any.
+  if classArgs.len == 0 and superArgs.len == 0:
+    result = makeExplicitClassTypeDecl(class, super, decls)
+  else:
+    result = makeGenericClassTypeDecl(class, super, classArgs, superArgs, decls)
 
 template alignment(typ: typed): untyped =
   ## Emits code to compute the alignment of a Nim type.
@@ -119,6 +221,7 @@ proc makeClassUtils*(className, superName: NimNode): NimNode =
       class(`classString`).super
     template `superProcName`*(clsType: typedesc[`className`]): `classType` =
       class(`classString`).super
+    template id*(cls: typedesc[`className`]): Id = Id(cls.class)
     template `converterName`*(cls: `className`): Id = cls.id
     proc standardDispose(cls: `className`) =
       when defined(objcDebugAlloc):
@@ -151,8 +254,8 @@ macro objectiveClass*(nameExpr: untyped, decls: untyped): untyped =
   ##    objectiveClass <ident / ident of ident>:
   ##      <ident defs>
   let
-    (className, superName) = makeClassNames(nameExpr)
-    typeDecl = makeClassTypeDecl(className, superName, decls)
+    (className, superName, classArgs, superArgs) = makeClassNames(nameExpr)
+    typeDecl = makeClassTypeDecl(className, superName, classArgs, superArgs, decls)
     classVariable = makeClassVariable(className, superName, decls)
     classUtilities = makeClassUtils(className, superName)
   result = newTree(nnkStmtList, typeDecl, classVariable, classUtilities)
@@ -161,8 +264,8 @@ macro objectiveClass*(nameExpr: untyped): untyped =
   ## Creates types, variables and procedures for an Objective-C
   ## class without member fields.
   let
-    (className, superName) = makeClassNames(nameExpr)
-    typeDecl = makeClassTypeDecl(className, superName, newEmptyNode())
+    (className, superName, classArgs, superArgs) = makeClassNames(nameExpr)
+    typeDecl = makeClassTypeDecl(className, superName, classArgs, superArgs, newEmptyNode())
     classVariable = makeClassVariable(className, superName, newEmptyNode())
     classUtilities = makeClassUtils(className, superName)
   result = newTree(nnkStmtList, typeDecl, classVariable, classUtilities)
@@ -170,30 +273,15 @@ macro objectiveClass*(nameExpr: untyped): untyped =
 macro importClass*(nameExpr: untyped, decls: untyped): untyped =
   ## Imports an existing Objective-C class and generates types for it.
   let
-    (className, superName) = makeClassNames(nameExpr)
-    typeDecl = makeClassTypeDecl(className, superName, decls)
+    (className, superName, classArgs, superArgs) = makeClassNames(nameExpr)
+    typeDecl = makeClassTypeDecl(className, superName, classArgs, superArgs, decls)
     classUtilities = makeClassUtils(className, superName)
   result = newTree(nnkStmtList, typeDecl, classUtilities)
 
 macro importClass*(nameExpr: untyped): untyped =
   ## Imports an existing Objective-C class and generates types for it.
   let
-    (className, superName) = makeClassNames(nameExpr)
-    typeDecl = makeClassTypeDecl(className, superName, newEmptyNode())
+    (className, superName, classArgs, superArgs) = makeClassNames(nameExpr)
+    typeDecl = makeClassTypeDecl(className, superName, classArgs, superArgs, newEmptyNode())
     classUtilities = makeClassUtils(className, superName)
   result = newTree(nnkStmtList, typeDecl, classUtilities)
-
-macro objectiveProtocol*(nameExpr: untyped, decls: untyped): untyped =
-  ## Creates concepts, variables and procedures for an Objective-C
-  ## protocol.
-  discard
-
-macro objectiveProperty*(nameExpr: untyped, procedure: untyped): untyped =
-  ## Creates an Objective-C property for an Objective-C class,
-  ## given a procedure implementing that property.
-  discard
-
-converter toProtocol*[T](x: T): int =
-  ## Converts a concrete Objective-C class type to a protocol type
-  ## it conforms to. TODO in macro.
-  discard
