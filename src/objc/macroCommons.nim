@@ -20,6 +20,7 @@ iterator supers*(typ: NimNode): NimNode =
   ## represented by a NimNode.
   assert typ.kind in {nnkObjectTy, nnkRefTy}
   var
+    previousInherit = newEmptyNode()
     lastInherit =
       if typ.kind == nnkRefTy:
         typ[0].getTypeImpl[1]
@@ -35,6 +36,9 @@ iterator supers*(typ: NimNode): NimNode =
       lastInherit = getTypeImpl(lastInherit[0])[1]
     elif typeImpl.kind == nnkRefTy:
       lastInherit = getTypeImpl(lastInherit[0])[0].getTypeImpl[1]
+    if previousInherit == lastInherit[0]:
+      break
+    previousInherit = lastInherit[0]
 
 proc isClass*(typ: NimNode): bool =
   ## Checks, whether an object type represents an Objective-C class.
