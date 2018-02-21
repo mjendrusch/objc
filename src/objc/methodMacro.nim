@@ -165,9 +165,22 @@ template stretInsanity(typ: untyped; size: int): untyped =
   else:
     cast[pointer](objcMsgSendStret)
 
-proc importMethodImpl(messageName: string; procedure: NimNode): NimNode =
+proc sanitizeGenericArgs(procedure: NimNode): NimNode =
+  ## Remove compiler-breaking typed-stage generic type symbols from
+  ## nkGenericArgs nodes for macro consumption.
+  if procedure[0].kind == nnkSym:
+    result = procedure.copyNimTree
+    if result[5].kind == nnkBracket:
+      result[2] = result[5][^1]
+    else:
+      result[2] = newEmptyNode()
+  else:
+    result = procedure
+
+proc importMethodImpl(messageName: string; typedProcedure: NimNode): NimNode =
   ## Implements Objective-C runtime method import.
   let
+    procedure = sanitizeGenericArgs(typedProcedure)
     args = procedure[3]
     self = newTree(nnkDotExpr,
       args[1][0].copyNimTree,
@@ -185,9 +198,6 @@ proc importMethodImpl(messageName: string; procedure: NimNode): NimNode =
       newTree(nnkPragma, ident"cdecl")
     )
   result = procedure.copyNimTree
-
-  # Gets rid of the GenericArgs node.
-  result[2] = newEmptyNode() # TODO: generalize to only remove certain generics.
 
   if returnType == bindsym"void":
     result[6] = quote do:
@@ -239,6 +249,7 @@ proc importMethodImpl(messageName: string; procedure: NimNode): NimNode =
     result[6] = quote do:
       let `funp` = cast[`castType`](objcMsgSend)
       return `funp`(`self`, $$`messageName`, `callArgs`)
+  echo treeRepr(result)
 
 macro importMethod*(messageName: static[string]; procedure: typed): untyped =
   ## Creates Objective-C bindings for a procedure prototype.
