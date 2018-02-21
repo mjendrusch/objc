@@ -12,6 +12,7 @@ objectiveClass InheritFieldsTest of RootFieldsTest:
   c: float
 objectiveClass GenericTest[T, U]
 objectiveClass MoreGenerics[T] of GenericTest[T, T]
+importClass NSArray[T] of NSObject
 
 {. push hint[XDeclaredButNotUsed]:off .}
 
