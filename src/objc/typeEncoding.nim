@@ -5,7 +5,7 @@ proc genTypeEncoding*(typ: NimNode; pointerDepth: int = 0): string
 
 proc genPrimitiveTypeEncoding*(typ: NimNode): string =
   ## Generates an Objective-C type encoding for a primitive type.
-  assert typ.kind == nnkSym
+  expectKind typ, nnkSym
   let identifier = $typ.symbol
   case identifier
   of "int8", "char", "cchar":
@@ -38,6 +38,7 @@ proc genPrimitiveTypeEncoding*(typ: NimNode): string =
     result = "*"
   else:
     result = "ERROR-TYPE"
+    error("Unknown primitive type: " & $toStrLit(typ), typ)
 
 proc genFieldEncoding*(typ: NimNode): string =
   ## Generates a type encoding string for a RecList.
@@ -88,8 +89,7 @@ proc genTypeEncoding*(typ: NimNode; pointerDepth: int = 0): string =
   of nnkSym:
     result = genPrimitiveTypeEncoding(typeImplementation)
   else:
-    echo treeRepr(typeImplementation)
-    echo "ERROR"
+    error("Unsupported type for encoding: " & $typ.toStrLit & " please file an issue on GitHub.", typ)
 
 proc genProcEncoding*(procedure: NimNode): string =
   ## Generates a type encoding for a procedure, to be used for adding methods

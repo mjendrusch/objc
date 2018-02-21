@@ -19,7 +19,7 @@ proc makeClassNames(nameExpr: NimNode): tuple[class, super, classArgs, superArgs
     of nnkIdent:
       result.class = classExpr
     else:
-      error("Invalid objective-C class declaration. Class name is not identifier or bracket expression!")
+      error("Invalid objective-C class declaration. Class name is not identifier or bracket expression!", nameExpr)
     case superExpr.kind
     of nnkBracketExpr:
       result.super = superExpr[0]
@@ -28,7 +28,7 @@ proc makeClassNames(nameExpr: NimNode): tuple[class, super, classArgs, superArgs
     of nnkIdent:
       result.super = superExpr
     else:
-      error("Invalid Objective-C class declaration. Super class name is not identifier or bracket expression!")
+      error("Invalid Objective-C class declaration. Super class name is not identifier or bracket expression!", nameExpr)
   of nnkIdent:
     result.class = nameExpr
   of nnkBracketExpr:
@@ -36,7 +36,7 @@ proc makeClassNames(nameExpr: NimNode): tuple[class, super, classArgs, superArgs
     for idx in 1 ..< nameExpr.len:
       result.classArgs.add nameExpr[idx]
   else:
-    error("Invalid Objective-C class declaration. Class is not identifier, bracket expression or infix expression!")
+    error("Invalid Objective-C class declaration. Class is not identifier, bracket expression or infix expression!", nameExpr)
 
 proc removeTypeQualifiers(arglist: NimNode): NimNode =
   ## Removes all type qualifier-like expressions from an arglist.

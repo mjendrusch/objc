@@ -176,6 +176,7 @@ proc sanitizeGenericArgs(procedure: NimNode): NimNode =
       result[2] = newEmptyNode()
   else:
     result = procedure
+    error("INTERNAL ERROR: expected typed AST. The received node is not typed.", procedure)
 
 proc importMethodImpl(messageName: string; typedProcedure: NimNode): NimNode =
   ## Implements Objective-C runtime method import.
@@ -249,7 +250,6 @@ proc importMethodImpl(messageName: string; typedProcedure: NimNode): NimNode =
     result[6] = quote do:
       let `funp` = cast[`castType`](objcMsgSend)
       return `funp`(`self`, $$`messageName`, `callArgs`)
-  echo treeRepr(result)
 
 macro importMethod*(messageName: static[string]; procedure: typed): untyped =
   ## Creates Objective-C bindings for a procedure prototype.

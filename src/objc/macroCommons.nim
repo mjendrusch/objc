@@ -19,7 +19,7 @@ type
 iterator supers*(typ: NimNode): NimNode =
   ## Iterates over all super types of a given object type
   ## represented by a NimNode.
-  assert typ.kind in {nnkObjectTy, nnkRefTy}
+  expectKind typ, {nnkObjectTy, nnkRefTy}
   var
     previousInherit = newEmptyNode()
     lastInherit =
