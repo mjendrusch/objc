@@ -8,6 +8,8 @@ importClass NSObject:
 proc alloc*(self: typedesc[NSObject]): NSObject {. importMethod: "alloc" .}
 proc init*(self: NSObject): NSObject {. importMethod: "init" .}
 proc copy*(self: NSObject): NSObject {. importMethod: "copy" .}
+proc retain*(self: NSObject): NSObject {. importMethod: "retain" .}
+proc release*(self: NSObject): NSObject {. importMethod: "release" .}
 proc mutableCopy*(self: NSObject): NSObject {. importMethod: "mutableCopy" .}
 proc dealloc*(self: NSObject): NSObject {. importMethod: "dealloc" .}
 proc methodForSelector*(self: NSObject; sel: Selector): Implementation {. importMethod: "methodForSelector:" .}

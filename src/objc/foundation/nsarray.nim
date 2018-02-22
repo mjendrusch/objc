@@ -2,7 +2,8 @@ import objc
 import nsobject
 # import nsindexset
 
-importClass NSArray
+importClass NSArray of NSObject
+importClass NSMutableArray of NSArray
 
 proc make*(self: typedesc[NSArray]): NSArray {. importMethod: "array" .}
 proc make*(self: typedesc[NSArray]; o1, o2: Id): NSArray {. importMethod: "arrayWithObjects:" .}

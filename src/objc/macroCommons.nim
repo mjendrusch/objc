@@ -1,15 +1,25 @@
 import objc.base, objc.hli
 import macros
 
-type
-  ClassType* = object {. inheritable .}
-    class*: Class
-  MetaClassType* = object {. inheritable .}
-  Object* = ref object of RootObj
-    id*: Id
-  SharedObject* = ref object of Object
-  UnsafeObject* = object of Object
+when defined(manualMode):
+  type
+    ClassType* = object {. inheritable .}
+      class*: Class
+    MetaClassType* = object {. inheritable .}
+    Object* = ptr object {. pure, inheritable .}
+    SharedObject* = ptr object of Object
+    UnsafeObject* = ptr object of Object
+else:
+  type
+    ClassType* = object {. inheritable .}
+      class*: Class
+    MetaClassType* = object {. inheritable .}
+    Object* = ref object of RootObj
+      id*: Id
+    SharedObject* = ref object of Object
+    UnsafeObject* = object of Object
 
+type
   AbstractObject* = concept obj
     obj is Object
     obj isnot typedesc
@@ -19,11 +29,11 @@ type
 iterator supers*(typ: NimNode): NimNode =
   ## Iterates over all super types of a given object type
   ## represented by a NimNode.
-  expectKind typ, {nnkObjectTy, nnkRefTy}
+  expectKind typ, {nnkObjectTy, nnkRefTy, nnkPtrTy}
   var
     previousInherit = newEmptyNode()
     lastInherit =
-      if typ.kind == nnkRefTy:
+      if typ.kind in {nnkRefTy, nnkPtrTy}:
         typ[0].getTypeImpl[1]
       else:
         typ[1]
@@ -44,7 +54,7 @@ iterator supers*(typ: NimNode): NimNode =
 proc isClass*(typ: NimNode): bool =
   ## Checks, whether an object type represents an Objective-C class.
   result = false
-  if typ.kind notin {nnkObjectTy, nnkRefTy}:
+  if typ.kind notin {nnkObjectTy, nnkRefTy, nnkPtrTy}:
     return false
   for super in typ.supers:
     if super.eqIdent "ClassType":
@@ -53,7 +63,7 @@ proc isClass*(typ: NimNode): bool =
 proc isObject*(typ: NimNode): bool =
   ## Checks, whether an object type represents an Objective-C object.
   result = false
-  if typ.kind notin {nnkObjectTy, nnkRefTy}:
+  if typ.kind notin {nnkObjectTy, nnkRefTy, nnkPtrTy}:
     return false
   if typ[0].eqIdent "Object:ObjectType":
     return true
@@ -61,16 +71,25 @@ proc isObject*(typ: NimNode): bool =
     if super.eqIdent "Object":
       return true
 
-proc objectDispose*(obj: Object) =
-  ## Disposes a Object, by releasing its Id.
-  when defined(objcDebugAlloc):
-    echo "RELEASED (Object): ", repr(cast[pointer](obj.id))
-  discard objcMsgSend(obj.id, $$"release")
+when defined(manualMode):
+  template id*(obj: Object): Id =
+    ## Converts an Object into an Id.
+    cast[Id](obj)
 
-proc newObject*(id: Id): Object =
-  ## Creates a new Object from an Id by retaining that Id.
-  new result, objectDispose
-  result.id = id
-  when defined(objcDebugAlloc):
-    echo "RETAINED (Object): ", repr(cast[pointer](id))
-  discard objcMsgSend(result.id, $$"retain")
+  proc newObject*(id: Id): Object =
+    ## Creates a newObject from an Id.
+    cast[Object](id)
+else:
+  proc objectDispose*(obj: Object) =
+    ## Disposes a Object, by releasing its Id.
+    when defined(objcDebugAlloc):
+      echo "RELEASED (Object): ", repr(cast[pointer](obj.id))
+    discard objcMsgSend(obj.id, $$"release")
+
+  proc newObject*(id: Id): Object =
+    ## Creates a new Object from an Id by retaining that Id.
+    new result, objectDispose
+    result.id = id
+    when defined(objcDebugAlloc):
+      echo "RETAINED (Object): ", repr(cast[pointer](id))
+    discard objcMsgSend(result.id, $$"retain")

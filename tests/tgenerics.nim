@@ -1,11 +1,15 @@
-import objc, objc.foundation
+import objc
 import unittest
 import macros
 
-type Concept = concept conc
-  conc.test is int
+type AbstractObject = concept obj
+  obj is Object
 
-proc evilProc[X](self: typedesc[NSObject]; a: X): Object {. importMethodAuto .}
+importClass NSObject
+importClass NSArray[T] of NSObject
+
+proc `[]`*[T: AbstractObject](self: NSArray[T]; index: culong): T
+  {. importMethod: "objectAtIndex:" .}
 
 suite "generics":
   test "generic methods":

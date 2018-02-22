@@ -165,13 +165,48 @@ template stretInsanity(typ: untyped; size: int): untyped =
   else:
     cast[pointer](objcMsgSendStret)
 
+proc sanitizeProcParams(procedure: NimNode): NimNode =
+  ## Strips Symbols from procedure parameters, to resolve symbol
+  ## conflicts arising from typed ASTs.
+  proc detype(x: NimNode): NimNode =
+    ## Strips all nkSym nodes from a Nim tree.
+    if x.kind == nnkSym:
+      return ident($x.symbol)
+    result = x.copyNimNode
+    for child in x.children:
+      result.add detype child
+
+  result = procedure.copyNimTree
+  for idx in 0 ..< procedure.params.len:
+    let
+      param = procedure.params[idx]
+    result[3][idx] = detype(param)
+
+proc goodGenericParams(genericSyms, genericIdents: NimNode): NimNode =
+  ## Extracts non-generated generic params from an untyped list of generic
+  ## identifiers and a typed list of generic symbols.
+  result = newNimNode(nnkGenericParams)
+  for param in genericSyms:
+    block identLoop:
+      for def in genericIdents:
+        for idx in 0 ..< def.len - 2:
+          let
+            identifier = def[idx]
+          if param.eqIdent($identifier.ident):
+            result.add param
+            break identLoop
+
 proc sanitizeGenericArgs(procedure: NimNode): NimNode =
-  ## Remove compiler-breaking typed-stage generic type symbols from
+  ## Removes compiler-breaking typed-stage generic type symbols from
   ## nkGenericArgs nodes for macro consumption.
+
+  let
+    genericSymbols = procedure[2]
   if procedure[0].kind == nnkSym:
     result = procedure.copyNimTree
     if result[5].kind == nnkBracket:
       result[2] = result[5][^1]
+      result[5] = newEmptyNode()
     else:
       result[2] = newEmptyNode()
   else:
@@ -250,6 +285,7 @@ proc importMethodImpl(messageName: string; typedProcedure: NimNode): NimNode =
     result[6] = quote do:
       let `funp` = cast[`castType`](objcMsgSend)
       return `funp`(`self`, $$`messageName`, `callArgs`)
+  result = sanitizeProcParams(result)
 
 macro importMethod*(messageName: static[string]; procedure: typed): untyped =
   ## Creates Objective-C bindings for a procedure prototype.

@@ -48,6 +48,17 @@ proc removeTypeQualifiers(arglist: NimNode): NimNode =
       result.add recurse(child)
   result = recurse arglist
 
+proc manualModeRefToPtr(node: NimNode): NimNode =
+  ## Replaces every occurence of nnkRefTy with nnkPtrTy,
+  ## every occurence of Ident "ref" with Ident "ptr".
+  if node.kind == nnkRefTy:
+    return newTree(nnkPtrTy, manualModeRefToPtr(node[0]))
+  if node.kind == nnkIdent and node.eqIdent("ref"):
+    return ident"ptr"
+  result = node.copyNimNode
+  for child in node:
+    result.add manualModeRefToPtr(child)
+
 proc makeGenericClassTypeDecl(class, super,
                               classArgs, superArgs,
                               decls: NimNode): NimNode =
@@ -93,7 +104,7 @@ proc makeGenericClassTypeDecl(class, super,
       superGenericName = ident($super.ident & "Generic")
       superGenericClassName = ident($super.ident & "GenericClass")
       superMetaClassName = ident($super.ident & "MetaClass")
-    if superArgs.len > 0:
+    if superArgs.len > 0 and classArgs.len > 0:
       result = quote do:
         type
           `metaClassName`* = object of `superMetaClassName`
@@ -101,6 +112,32 @@ proc makeGenericClassTypeDecl(class, super,
           `className`*[`classArgs`] = object of `superClassName`[`rhsSuperArgs`]
           `classGenericName`* = ref object of `superGenericName`
           `class`*[`classArgs`] = ref object of `super`[`rhsSuperArgs`]
+        template superClassType*(typ: typedesc[`class`]): untyped = `superClassName`
+        template classType*(typ: typedesc[`class`]): untyped = `className`
+        template metaClassType*(typ: typedesc[`class`]): untyped = `metaClassName`
+        template superClassType*(typ: `class`): untyped = `superClassName`
+        template classType*(typ: `class`): untyped = `className`
+        template metaClassType*(typ: `class`): untyped = `metaClassName`
+    elif superArgs.len > 0:
+      result = quote do:
+        type
+          `metaClassName`* = object of `superMetaClassName`
+          `className`* = object of `superClassName`[`rhsSuperArgs`]
+          `class`* = ref object of `super`[`rhsSuperArgs`]
+        template superClassType*(typ: typedesc[`class`]): untyped = `superClassName`
+        template classType*(typ: typedesc[`class`]): untyped = `className`
+        template metaClassType*(typ: typedesc[`class`]): untyped = `metaClassName`
+        template superClassType*(typ: `class`): untyped = `superClassName`
+        template classType*(typ: `class`): untyped = `className`
+        template metaClassType*(typ: `class`): untyped = `metaClassName`
+    elif classArgs.len > 0:
+      result = quote do:
+        type
+          `metaClassName`* = object of `superMetaClassName`
+          `classGenericClassName`* = object of `superClassName`
+          `className`*[`classArgs`] = object of `classGenericClassName`
+          `classGenericName`* = ref object of `super`
+          `class`*[`classArgs`] = ref object of `classGenericName`
         template superClassType*(typ: typedesc[`class`]): untyped = `superClassName`
         template classType*(typ: typedesc[`class`]): untyped = `className`
         template metaClassType*(typ: typedesc[`class`]): untyped = `metaClassName`
@@ -119,6 +156,8 @@ proc makeGenericClassTypeDecl(class, super,
         template superClassType*(typ: `class`): untyped = `superClassName`
         template classType*(typ: `class`): untyped = `className`
         template metaClassType*(typ: `class`): untyped = `metaClassName`
+  when defined(manualMode):
+    result = manualModeRefToPtr(result)
   var
     typeDecl = result[0][1]
   typeDecl[^1][^1] = newNimNode(nnkRecList)
