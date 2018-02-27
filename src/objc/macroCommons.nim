@@ -19,12 +19,16 @@ else:
     SharedObject* = ref object of Object
     UnsafeObject* = object of Object
 
+{. hints: off .}
+
 type
   AbstractObject* = concept obj
     obj is Object
     obj isnot typedesc
   AbstractObjectType* = concept obj
     obj is typedesc[Object]
+
+{. hints: on .}
 
 iterator supers*(typ: NimNode): NimNode =
   ## Iterates over all super types of a given object type
@@ -75,6 +79,9 @@ when defined(manualMode):
   template id*(obj: Object): Id =
     ## Converts an Object into an Id.
     cast[Id](obj)
+  template `id=`*(obj: var Object; id: Id) =
+    ## Sets the Id of an Object.
+    obj = cast[Object](Id)
 
   proc newObject*(id: Id): Object =
     ## Creates a newObject from an Id.

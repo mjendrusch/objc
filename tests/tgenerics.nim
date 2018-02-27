@@ -2,9 +2,6 @@ import objc
 import unittest
 import macros
 
-type AbstractObject = concept obj
-  obj is Object
-
 importClass NSObject
 importClass NSArray[T] of NSObject
 

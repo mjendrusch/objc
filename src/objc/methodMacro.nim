@@ -182,26 +182,25 @@ proc sanitizeProcParams(procedure: NimNode): NimNode =
       param = procedure.params[idx]
     result[3][idx] = detype(param)
 
-proc goodGenericParams(genericSyms, genericIdents: NimNode): NimNode =
-  ## Extracts non-generated generic params from an untyped list of generic
-  ## identifiers and a typed list of generic symbols.
-  result = newNimNode(nnkGenericParams)
-  for param in genericSyms:
-    block identLoop:
-      for def in genericIdents:
-        for idx in 0 ..< def.len - 2:
-          let
-            identifier = def[idx]
-          if param.eqIdent($identifier.ident):
-            result.add param
-            break identLoop
+# proc goodGenericParams(genericSyms, genericIdents: NimNode): NimNode =
+#   ## Extracts non-generated generic params from an untyped list of generic
+#   ## identifiers and a typed list of generic symbols.
+#   result = newNimNode(nnkGenericParams)
+#   for param in genericSyms:
+#     block identLoop:
+#       for def in genericIdents:
+#         for idx in 0 ..< def.len - 2:
+#           let
+#             identifier = def[idx]
+#           if param.eqIdent($identifier.ident):
+#             result.add param
+#             break identLoop
 
 proc sanitizeGenericArgs(procedure: NimNode): NimNode =
   ## Removes compiler-breaking typed-stage generic type symbols from
   ## nkGenericArgs nodes for macro consumption.
-
-  let
-    genericSymbols = procedure[2]
+  # let
+  #   genericSymbols = procedure[2]
   if procedure[0].kind == nnkSym:
     result = procedure.copyNimTree
     if result[5].kind == nnkBracket:
@@ -222,6 +221,7 @@ proc importMethodImpl(messageName: string; typedProcedure: NimNode): NimNode =
       args[1][0].copyNimTree,
       ident"id")
     returnType = args[0]
+    returnTypeImpl = returnType.getTypeImpl
     (callArgs, callArgTypes) = makeImportMethodCallArgs(args)
     castType = newTree(nnkProcTy,
       block:
@@ -272,9 +272,10 @@ proc importMethodImpl(messageName: string; typedProcedure: NimNode): NimNode =
     result[6] = quote do:
       let `funp` = cast[`castType`](`whichMsgSend`)
       return `funp`(`self`, $$`messageName`, `callArgs`)
-  elif returnType.getTypeImpl.isObject:
+  elif returnTypeImpl.isObject:
     let
-      newResult = ident("new" & $returnType.symbol)
+      typ = returnType.getTypeInst
+      newResult = ident("new" & $typ.symbol)
       funp = gensym(nskLet)
     result[6] = quote do:
       let `funp` = cast[`castType`](objcMsgSend)
