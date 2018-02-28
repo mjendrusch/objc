@@ -94,6 +94,7 @@ proc genMethodProc(procedure, name: NimNode): NimNode =
     else:
       result[6] = newTree(nnkStmtList,
         newTree(nnkAsgn, ident"result", call))
+  result = result.copyNimTree
 
 # macro objectiveMethod*(importString: typed; procedure: typed): untyped =
 #   ## Adds a procedure to an Objective-C runtime class.
@@ -124,6 +125,7 @@ macro objectiveMethod*(procedure: typed): untyped =
     discard addMethod(`class`.class, $$`methodSelector`,
                       cast[`implementation`](`procName`),
                       `encoding`)
+  result = result.copyNimTree
 
 proc makeImportMethodCallArgs*(args: NimNode): tuple[args, types: NimNode] =
   ## Creates the call arguments for the static method call of an imported
@@ -158,6 +160,8 @@ proc makeImportMethodCallArgs*(args: NimNode): tuple[args, types: NimNode] =
             newTree(nnkIdentDefs, param, defType, newEmptyNode())
       result.args.add callArg
       result.types.add argType
+  result.args = result.args.copyNimTree
+  result.types = result.types.copyNimTree
 
 template stretInsanity(typ: untyped; size: int): untyped =
   if sizeof(typ) <= size:
@@ -165,22 +169,24 @@ template stretInsanity(typ: untyped; size: int): untyped =
   else:
     cast[pointer](objcMsgSendStret)
 
+proc detype(x: NimNode): NimNode =
+  ## Strips all nkSym nodes from a Nim tree.
+  if x.kind == nnkSym:
+    return ident($x.symbol)
+  result = x.copyNimNode
+  for child in x.children:
+    result.add detype child
+
 proc sanitizeProcParams(procedure: NimNode): NimNode =
   ## Strips Symbols from procedure parameters, to resolve symbol
   ## conflicts arising from typed ASTs.
-  proc detype(x: NimNode): NimNode =
-    ## Strips all nkSym nodes from a Nim tree.
-    if x.kind == nnkSym:
-      return ident($x.symbol)
-    result = x.copyNimNode
-    for child in x.children:
-      result.add detype child
 
   result = procedure.copyNimTree
   for idx in 0 ..< procedure.params.len:
     let
       param = procedure.params[idx]
     result[3][idx] = detype(param)
+  result = result.copyNimTree
 
 # proc goodGenericParams(genericSyms, genericIdents: NimNode): NimNode =
 #   ## Extracts non-generated generic params from an untyped list of generic
@@ -206,11 +212,87 @@ proc sanitizeGenericArgs(procedure: NimNode): NimNode =
     if result[5].kind == nnkBracket:
       result[2] = result[5][^1]
       result[5] = newEmptyNode()
+      error("Generic method import is supported via `genericMethod`.", procedure)
     else:
       result[2] = newEmptyNode()
   else:
     result = procedure
     error("INTERNAL ERROR: expected typed AST. The received node is not typed.", procedure)
+  result = result.copyNimTree
+
+proc makeProcedurePointerType(returnType, callArgTypes, args: NimNode): NimNode =
+  ## Constructs the type an objc_msgSend procedure pointer should be cast to,
+  ## given the destructured ``FormalParams`` node of a given procedure signature
+  ## to be imported or defined as a method.
+  # var res: tuple[vaNode, typ: NimNode]
+  result = newTree(nnkProcTy)
+  var
+    formalParams = newTree(nnkFormalParams, returnType)
+    pragmas = newTree(nnkPragma, ident"cdecl")
+  for idx in 1 ..< args.len:
+    let
+      arg = args[idx]
+      typ = arg[^2]
+    if typ.kind == nnkBracketExpr and typ[0].kind in {nnkIdent, nnkSym} and
+       typ[0].eqIdent "varargs":
+      error("Varargs arguments to methods are currently not supported!", args)
+  for idx in 0 ..< callArgTypes.len:
+    let
+      argType = callArgTypes[idx]
+    formalParams.add argType
+  if returnType.getTypeImpl.isObject:
+    formalParams[0] = bindsym"Id"
+  result.add formalParams
+  result.add pragmas
+  result = result.copyNimTree
+
+## TODO: find another way to automatically wrap variadic methods.
+# macro resolveVarArgsInProc(typ: typed; varArgSize: static[int]): untyped =
+#   ## Resolves a vararg argument inside a procedure or a procedure type.
+#   let
+#     args = typ[0]
+#     returnType = args[0]
+#   var
+#     formalParams = newTree(nnkFormalParams, returnType)
+#   result = newTree(nnkProcTy)
+#   for idx in 1 ..< args.len:
+#     let
+#       arg = args[idx]
+#       argType = arg[^2]
+#     if argType.kind == nnkBracketExpr and argType[0].eqIdent "varargs":
+#       let
+#         varArgType = argType[0].copyNimTree
+#       for idx in 0 ..< varArgSize:
+#         let
+#           varArgNSym = gensym(nskParam, "varArg" & $idx)
+#           varArg = newTree(nnkIdentDefs,
+#             varArgNSym,
+#             varArgType,
+#             newEmptyNode())
+#         formalParams.add varArg
+#     else:
+#       formalParams.add arg.copyNimTree
+#   result.add formalParams
+#   result.add newTree(nnkPragma, ident"cdecl")
+
+proc genConstructorName(typ: NimNode): tuple[name, args: NimNode] =
+  ## Generates the identifier for a type's constructor based on that type's
+  ## name and generic parameters.
+  result.args = newEmptyNode()
+  case typ.kind
+  of nnkSym, nnkIdent:
+    result.name = ident("new" & $typ)
+  of nnkBracketExpr:
+    if typ[0].kind notin {nnkSym, nnkIdent}:
+      error("Unsupported return type is not identifier or generic", typ)
+    result.name = ident("new" & $typ[0])
+    result.args = newTree(nnkArgList)
+    for idx in 1 ..< typ.len:
+      result.args.add typ[idx].copyNimTree
+  else:
+    error("Internal error genConstructorName: this should be impossible. Please file an issue on GitHub.")
+  result.name = result.name.copyNimTree
+  result.args = result.args.copyNimTree
 
 proc importMethodImpl(messageName: string; typedProcedure: NimNode): NimNode =
   ## Implements Objective-C runtime method import.
@@ -223,16 +305,7 @@ proc importMethodImpl(messageName: string; typedProcedure: NimNode): NimNode =
     returnType = args[0]
     returnTypeImpl = returnType.getTypeImpl
     (callArgs, callArgTypes) = makeImportMethodCallArgs(args)
-    castType = newTree(nnkProcTy,
-      block:
-        var tree = newTree(nnkFormalParams, returnType)
-        for child in callArgTypes.children:
-          tree.add child
-        if returnType.getTypeImpl.isObject:
-          tree[0] = bindsym"Id"
-        tree,
-      newTree(nnkPragma, ident"cdecl")
-    )
+    castType = makeProcedurePointerType(returnType, callArgTypes, args)
   result = procedure.copyNimTree
 
   if returnType == bindsym"void":
@@ -275,11 +348,16 @@ proc importMethodImpl(messageName: string; typedProcedure: NimNode): NimNode =
   elif returnTypeImpl.isObject:
     let
       typ = returnType.getTypeInst
-      newResult = ident("new" & $typ.symbol)
+      (newResult, args) = genConstructorName(typ)#ident("new" & $typ.symbol)
       funp = gensym(nskLet)
-    result[6] = quote do:
-      let `funp` = cast[`castType`](objcMsgSend)
-      `newResult`(`funp`(`self`, $$`messageName`, `callArgs`))
+    if args.kind == nnkEmpty:
+      result[6] = quote do:
+        let `funp` = cast[`castType`](objcMsgSend)
+        `newResult`(`funp`(`self`, $$`messageName`, `callArgs`))
+    else:
+      result[6] = quote do:
+        let `funp` = cast[`castType`](objcMsgSend)
+        `newResult`[`args`](`funp`(`self`, $$`messageName`, `callArgs`))
   else:
     let
       funp = gensym(nskLet)
@@ -287,16 +365,19 @@ proc importMethodImpl(messageName: string; typedProcedure: NimNode): NimNode =
       let `funp` = cast[`castType`](objcMsgSend)
       return `funp`(`self`, $$`messageName`, `callArgs`)
   result = sanitizeProcParams(result)
+  result = result.copyNimTree
 
 macro importMethod*(messageName: static[string]; procedure: typed): untyped =
   ## Creates Objective-C bindings for a procedure prototype.
   result = importMethodImpl(messageName, procedure)
+  result = result.copyNimTree
 
 macro importMethodAuto*(procedure: typed): untyped =
   ## Creates Objective-C bindings for a procedure prototype.
   let
     messageName = $procedure[0].symbol
   result = importMethodImpl(messageName, procedure)
+  result = result.copyNimTree
 
 macro importMangle*(messageName: static[string]; procedure: typed): untyped =
   ## Creates Objective-C bindings for a procedure prototype, automatically
@@ -305,6 +386,7 @@ macro importMangle*(messageName: static[string]; procedure: typed): untyped =
     mangledName = mangleMethodSelector(messageName,
                                        genMethodArgTypes(procedure))
   result = importMethodImpl(mangledName, procedure)
+  result = result.copyNimTree
 
 macro importMangleAuto*(procedure: typed): untyped =
   ## Creates Objective-C bindings for a procedure prototype, automatically
@@ -314,3 +396,34 @@ macro importMangleAuto*(procedure: typed): untyped =
     mangledName = mangleMethodSelector(messageName,
                                        genMethodArgTypes(procedure))
   result = importMethodImpl(mangledName, procedure)
+  result = result.copyNimTree
+
+macro genericMethod*(prototype: untyped): untyped =
+  ## Given a method defined for the ``XAny`` type of a class ``X``,
+  ## create a generic wrapper with the given type signature for that method.
+  let
+    procName = prototype[0]
+    procArgs = prototype.params
+    self = procArgs[1][0]
+    returnType = procArgs[0]
+    baseName =
+      if procName.kind == nnkIdent:
+        procName
+      else:
+        procName.baseName
+    procCall = block:
+      var res = newTree(nnkCall, baseName)
+      res.add newTree(nnkCall,
+        newTree(nnkCall,
+          ident"genericType",
+          self),
+        self)
+      for idx in 2 ..< procArgs.len:
+        let
+          name = procArgs[idx][0]
+        res.add name
+      res
+  result = newTree(nnkProcDef)
+  for child in prototype.children:
+    result.add child.copyNimTree
+  result[6] = newTree(nnkCast, returnType, procCall)

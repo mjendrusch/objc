@@ -11,8 +11,20 @@ proc at*(self: NSArray; index: int): Object =
   newObject(send(self.id, $$"objectAtIndex:", culong index))
 
 suite "foundation":
-  test "NSObject":
+  test "NSArray":
     let obj = NSObject.alloc
-    let ar = NSArray.make(obj.id, obj.id)
-    check ar[0].id == obj.id
-    check ar[1].id == obj.id
+    let
+      ar1 = nsarray(obj)
+      ar2 = nsarray(obj, obj)
+      ar3 = nsarray(obj, obj, obj)
+      ar4 = nsarray(obj, obj, obj, obj)
+    check ar1[0].id == obj.id
+    check ar2[0].id == obj.id
+    check ar2[1].id == obj.id
+    check ar3[0].id == obj.id
+    check ar3[1].id == obj.id
+    check ar3[2].id == obj.id
+    check ar4[0].id == obj.id
+    check ar4[1].id == obj.id
+    check ar4[2].id == obj.id
+    check ar4[3].id == obj.id

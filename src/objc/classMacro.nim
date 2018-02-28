@@ -66,11 +66,12 @@ proc makeGenericClassTypeDecl(class, super,
   let
     rhsClassArgs = removeTypeQualifiers(classArgs)
     className = ident($class.ident & "Class")
-    classGenericName = ident($class.ident & "Generic")
-    classGenericClassName = ident($class.ident & "GenericClass")
-    classGenericObjectName = ident($class.ident & "GenericObj")
+    classGenericName = ident($class.ident & "Any")
+    classGenericClassName = ident($class.ident & "AnyClass")
+    classGenericObjectName = ident($class.ident & "AnyObj")
     classObject = ident($class.ident & "Obj")
     metaClassName = ident($class.ident & "MetaClass")
+
   if super.isNil:
     if classArgs.len > 0:
       result = quote do:
@@ -82,9 +83,11 @@ proc makeGenericClassTypeDecl(class, super,
           `classObject`*[`classArgs`] = object of `classGenericObjectName`
           `classGenericName`* = ref `classGenericObjectName`
           `class`*[`classArgs`] = ref `classObject`[`rhsClassArgs`]
-        template classType*(typ: typedesc[`class`]): untyped = `classGenericName`
+        template genericType*(typ: typedesc[`class`]): untyped = `classGenericName`
+        template genericType*(typ: `class`): untyped = `classGenericName`
+        template classType*(typ: typedesc[`class`]): untyped = `classGenericClassName`
         template metaClassType*(typ: typedesc[`class`]): untyped = `metaClassName`
-        template classType*(typ: `class`): untyped = `classGenericName`
+        template classType*(typ: `class`): untyped = `classGenericClassName`
         template metaClassType*(typ: `class`): untyped = `metaClassName`
     else:
       result = quote do:
@@ -101,8 +104,8 @@ proc makeGenericClassTypeDecl(class, super,
     let
       rhsSuperArgs = removeTypeQualifiers(superArgs)
       superClassName = ident($super.ident & "Class")
-      superGenericName = ident($super.ident & "Generic")
-      superGenericClassName = ident($super.ident & "GenericClass")
+      superGenericName = ident($super.ident & "Any")
+      superGenericClassName = ident($super.ident & "AnyClass")
       superMetaClassName = ident($super.ident & "MetaClass")
     if superArgs.len > 0 and classArgs.len > 0:
       result = quote do:
@@ -118,6 +121,8 @@ proc makeGenericClassTypeDecl(class, super,
         template superClassType*(typ: `class`): untyped = `superClassName`
         template classType*(typ: `class`): untyped = `className`
         template metaClassType*(typ: `class`): untyped = `metaClassName`
+        template genericType*(typ: typedesc[`class`]): untyped = `classGenericName`
+        template genericType*(typ: `class`): untyped = `classGenericName`
     elif superArgs.len > 0:
       result = quote do:
         type
@@ -144,6 +149,8 @@ proc makeGenericClassTypeDecl(class, super,
         template superClassType*(typ: `class`): untyped = `superClassName`
         template classType*(typ: `class`): untyped = `className`
         template metaClassType*(typ: `class`): untyped = `metaClassName`
+        template genericType*(typ: typedesc[`class`]): untyped = `classGenericName`
+        template genericType*(typ: `class`): untyped = `classGenericName`
     else:
       result = quote do:
         type
@@ -224,48 +231,119 @@ proc makeClassVariable(class, super, decls: NimNode): NimNode =
       `addAllIvars`
       `theClass`.register
 
-proc makeClassUtils*(className, superName: NimNode): NimNode =
-  ## Creates utility templates, procedures and converters for a given class.
+proc makeSuperTemplates*(className, superName: NimNode): NimNode =
+  ## Creates templates to access the superclass type of a class type.
   let
-    classProcName = ident"class"
     superProcName = ident"super"
-    converterName = ident"dyn"
     classType = bindsym"Class"
     classString = className.toStrLit
-    newClass = ident("new" & $className.ident)
   result = quote do:
-    template `classProcName`*(cls: `className`): `classType` =
-      class(`classString`)
-    template `classProcName`*(clsType: typedesc[`className`]): `classType` =
-      class(`classString`)
     template `superProcName`*(cls: `className`): `classType` =
       class(`classString`).super
     template `superProcName`*(clsType: typedesc[`className`]): `classType` =
       class(`classString`).super
-    template id*(cls: typedesc[`className`]): Id = Id(cls.class)
-    template `converterName`*(cls: `className`): Id = cls.id
-    proc standardDispose(cls: `className`) =
-      when defined(objcDebugAlloc):
-        echo "RELEASED ", repr(cast[pointer](cls.id))
-      discard objcMsgSend(cls.id, $$"release")
-    proc `newClass`*: `className` =
-      var res: `className`
-      new res, standardDispose
-      res.id = objcMsgSend(
-        objcMsgSend(`className`.class.Id,
-                    $$"alloc"),
-        $$"init")
-      when defined(objcDebugAlloc):
-        echo "ALLOCATED ", `classString`, ": ", repr(cast[pointer](res.id))
-      res
-    proc `newClass`*(id: Id): `className` =
-      var res: `className`
-      new res, standardDispose
-      res.id = id
-      when defined(objcDebugAlloc):
-        echo "RETAINED ", `classString`, ": ", repr(cast[pointer](res.id))
-      discard objcMsgSend(id, $$"retain")
-      res
+
+proc makeClassUtils*(className, classArgs: NimNode): NimNode =
+  ## Creates utility templates, procedures and converters for a given class.
+  let
+    classProcName = ident"class"
+    converterName = ident"dyn"
+    classType = bindsym"Class"
+    classString = className.toStrLit
+    newClass = ident("new" & $className.ident)
+
+  if classArgs.len == 0:
+    result = quote do:
+      template `classProcName`*(cls: `className`): `classType` =
+        class(`classString`)
+      template `classProcName`*(clsType: typedesc[`className`]): `classType` =
+        class(`classString`)
+      template id*(cls: typedesc[`className`]): Id = Id(cls.class)
+      template `converterName`*(cls: `className`): Id = cls.id
+      proc standardDispose(cls: `className`) =
+        when defined(objcDebugAlloc):
+          echo "RELEASED ", repr(cast[pointer](cls.id))
+        discard objcMsgSend(cls.id, $$"release")
+      proc `newClass`*: `className` =
+        var res: `className`
+        when not defined(manualMode):
+          new res, standardDispose
+        res.id = objcMsgSend(
+          objcMsgSend(`className`.class.Id,
+                      $$"alloc"),
+          $$"init")
+        when defined(objcDebugAlloc):
+          echo "ALLOCATED ", `classString`, ": ", repr(cast[pointer](res.id))
+        res
+      proc `newClass`*(id: Id): `className` =
+        var res: `className`
+        when not defined(manualMode):
+          new res, standardDispose
+        res.id = id
+        when defined(objcDebugAlloc):
+          echo "RETAINED ", `classString`, ": ", repr(cast[pointer](res.id))
+        discard objcMsgSend(id, $$"retain")
+        res
+  else:
+    let
+      classNameGeneric = ident($className.ident & "Any")
+      newClassGeneric = ident("new" & $className.ident & "Any")
+    result = quote do:
+      template `classProcName`*(cls: `classNameGeneric`): `classType` =
+        class(`classString`)
+      template `classProcName`*(clsType: typedesc[`classNameGeneric`]): `classType` =
+        class(`classString`)
+      template id*(cls: typedesc[`classNameGeneric`]): Id = Id(cls.class)
+      template `converterName`*(cls: `className`): Id = cls.id
+      proc standardDispose[`classArgs`](cls: `className`[`classArgs`]) =
+        when defined(objcDebugAlloc):
+          echo "RELEASED ", repr(cast[pointer](cls.id))
+        discard objcMsgSend(cls.id, $$"release")
+      proc standardDispose(cls: `classNameGeneric`) =
+        when defined(objcDebugAlloc):
+          echo "RELEASED ", repr(cast[pointer](cls.id))
+        discard objcMsgSend(cls.id, $$"release")
+      proc `newClass`*[`classArgs`]: `className`[`classArgs`] =
+        var res: `className`[`classArgs`]
+        when not defined(manualMode):
+          new res, standardDispose[`classArgs`]
+        res.id = objcMsgSend(
+          objcMsgSend(`classString`.class.Id,
+                      $$"alloc"),
+          $$"init")
+        when defined(objcDebugAlloc):
+          echo "ALLOCATED ", `classString`, ": ", repr(cast[pointer](res.id))
+        res
+      proc `newClass`*[`classArgs`](id: Id): `className`[`classArgs`] =
+        var res: `className`[`classArgs`]
+        when not defined(manualMode):
+          new res, standardDispose[`classArgs`]
+        res.id = id
+        when defined(objcDebugAlloc):
+          echo "RETAINED ", `classString`, ": ", repr(cast[pointer](res.id))
+        discard objcMsgSend(id, $$"retain")
+        res
+      proc `newClassGeneric`*: `classNameGeneric` =
+        var res: `classNameGeneric`
+        when not defined(manualMode):
+          new res, standardDispose
+        res.id = objcMsgSend(
+          objcMsgSend(`classString`.class.Id,
+                      $$"alloc"),
+          $$"init")
+        when defined(objcDebugAlloc):
+          echo "ALLOCATED ", `classString`, ": ", repr(cast[pointer](res.id))
+        res
+      proc `newClassGeneric`*(id: Id): `classNameGeneric` =
+        var res: `classNameGeneric`
+        when not defined(manualMode):
+          new res, standardDispose
+        res.id = id
+        when defined(objcDebugAlloc):
+          echo "RETAINED ", `classString`, ": ", repr(cast[pointer](res.id))
+        discard objcMsgSend(id, $$"retain")
+        res
+  result = result.copyNimTree
 
 macro objectiveClass*(nameExpr: untyped, decls: untyped): untyped =
   ## Creates types, variables and procedures for an Objective-C
@@ -278,8 +356,14 @@ macro objectiveClass*(nameExpr: untyped, decls: untyped): untyped =
     (className, superName, classArgs, superArgs) = makeClassNames(nameExpr)
     typeDecl = makeClassTypeDecl(className, superName, classArgs, superArgs, decls)
     classVariable = makeClassVariable(className, superName, decls)
-    classUtilities = makeClassUtils(className, superName)
-  result = newTree(nnkStmtList, typeDecl, classVariable, classUtilities)
+    classUtilities = makeClassUtils(className, classArgs)
+    superTemplates = makeSuperTemplates(className, superName)
+  result = newTree(nnkStmtList,
+    typeDecl,
+    classVariable,
+    classUtilities,
+    superTemplates
+  )
 
 macro objectiveClass*(nameExpr: untyped): untyped =
   ## Creates types, variables and procedures for an Objective-C
@@ -288,21 +372,37 @@ macro objectiveClass*(nameExpr: untyped): untyped =
     (className, superName, classArgs, superArgs) = makeClassNames(nameExpr)
     typeDecl = makeClassTypeDecl(className, superName, classArgs, superArgs, newEmptyNode())
     classVariable = makeClassVariable(className, superName, newEmptyNode())
-    classUtilities = makeClassUtils(className, superName)
-  result = newTree(nnkStmtList, typeDecl, classVariable, classUtilities)
+    classUtilities = makeClassUtils(className, classArgs)
+    superTemplates = makeSuperTemplates(className, superName)
+  result = newTree(nnkStmtList,
+    typeDecl,
+    classVariable,
+    classUtilities,
+    superTemplates
+  )
 
 macro importClass*(nameExpr: untyped, decls: untyped): untyped =
   ## Imports an existing Objective-C class and generates types for it.
   let
     (className, superName, classArgs, superArgs) = makeClassNames(nameExpr)
     typeDecl = makeClassTypeDecl(className, superName, classArgs, superArgs, decls)
-    classUtilities = makeClassUtils(className, superName)
-  result = newTree(nnkStmtList, typeDecl, classUtilities)
+    classUtilities = makeClassUtils(className, classArgs)
+    superTemplates = makeSuperTemplates(className, superName)
+  result = newTree(nnkStmtList,
+    typeDecl,
+    classUtilities,
+    superTemplates
+  )
 
 macro importClass*(nameExpr: untyped): untyped =
   ## Imports an existing Objective-C class and generates types for it.
   let
     (className, superName, classArgs, superArgs) = makeClassNames(nameExpr)
     typeDecl = makeClassTypeDecl(className, superName, classArgs, superArgs, newEmptyNode())
-    classUtilities = makeClassUtils(className, superName)
-  result = newTree(nnkStmtList, typeDecl, classUtilities)
+    classUtilities = makeClassUtils(className, classArgs)
+    superTemplates = makeSuperTemplates(className, superName)
+  result = newTree(nnkStmtList,
+    typeDecl,
+    classUtilities,
+    superTemplates
+  )

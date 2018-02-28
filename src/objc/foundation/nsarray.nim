@@ -1,22 +1,50 @@
 import objc
 import nsobject
-# import nsindexset
+import objc.utils.varargsObjectToIdPointer
+# import nsindexse
 
-importClass NSArray of NSObject
-importClass NSMutableArray of NSArray
+importClass NSArray[T] of NSObject
+importClass NSMutableArray[T] of NSArray[T]
 
-proc make*(self: typedesc[NSArray]): NSArray {. importMethod: "array" .}
-proc make*(self: typedesc[NSArray]; o1, o2: Id): NSArray {. importMethod: "arrayWithObjects:" .}
-proc init*(self: NSArray): NSArray {. importMethod: "init" .}
-proc init*(self: NSArray; ar: NSArray): NSArray {. importMethod: "initWithArray:" .}
-proc init*(self: NSArray; ar: NSArray; copy: bool): NSArray {. importMethod: "initWithArray:copyItems:" .}
-proc init*(self: NSArray; o1: NSObject): NSArray {. importMethod: "initWithObjects:" .}
-proc contains*(self: NSArray; obj: Object): bool {. importMethod: "containsObject:" .}
-proc len*(self: NSArray): int {. importMethod: "count" .}
-proc first*(self: NSArray): Object {. importMethod: "firstObject" .}
-proc last*(self: NSArray): Object {. importMethod: "lastObject" .}
-proc `[]`*(self: NSArray; index: culong): Object {. importMethod: "objectAtIndex:" .}
-# proc `[]`*(self: NSArray; index: NSIndexSet): NSArray {. importMethod: "objectsAtIndexes:" .}
-proc index*(self: NSArray; obj: Object): uint {. importMethod: "indexOfObject:" .}
-proc map*(self: NSArray; sel: Selector): Object {. importMethod: "makeObjectsPerformSelector:" .}
-proc `==`*(self: NSArray; other: NSArray): bool {. importMethod: "isEqualToArray:" .}
+# NSArray methods:
+proc make*(self: typedesc[NSArrayAny]): NSArrayAny {. importMethod: "array" .}
+proc make*(self: typedesc[NSArrayAny]; os: pointer; count: cuint): NSArrayAny {. importMethod: "arrayWithObjects:count:" .}
+proc init*(self: NSArrayAny): NSArrayAny {. importMethod: "init" .}
+proc init*(self: NSArrayAny; ar: NSArrayAny): NSArrayAny {. importMethod: "initWithArray:" .}
+proc init*(self: NSArrayAny; ar: NSArrayAny; copy: bool): NSArrayAny {. importMethod: "initWithArray:copyItems:" .}
+proc init*(self: NSArrayAny; o1: NSObject): NSArrayAny {. importMethod: "initWithObjects:" .}
+proc contains*(self: NSArrayAny; obj: Object): bool {. importMethod: "containsObject:" .}
+proc len*(self: NSArrayAny): int {. importMethod: "count" .}
+proc first*(self: NSArrayAny): Object {. importMethod: "firstObject" .}
+proc last*(self: NSArrayAny): Object {. importMethod: "lastObject" .}
+proc `[]`*(self: NSArrayAny; index: culong): Object {. importMethod: "objectAtIndex:" .}
+# proc `[]`*(self: NSArrayAny; index: NSIndexSet): NSArrayAny {. importMethod: "objectsAtIndexes:" .}
+proc index*(self: NSArrayAny; obj: Object): uint {. importMethod: "indexOfObject:" .}
+proc map*(self: NSArrayAny; sel: Selector): Object {. importMethod: "makeObjectsPerformSelector:" .}
+proc `==`*(self: NSArrayAny; other: NSArrayAny): bool {. importMethod: "isEqualToArray:" .}
+
+proc make*[T](self: typedesc[NSArray[T]]): NSArray[T] {. genericMethod .}
+proc init*[T](self: NSArray[T]): NSArray[T] {. genericMethod .}
+proc init*[T](self: NSArray[T]; ar: NSArray[T]): NSArray[T] {. genericMethod .}
+proc init*[T](self: NSArray[T]; ar: NSArray[T]; copy: bool): NSArray[T] {. genericMethod .}
+proc contains*[T](self: NSArray[T]; obj: T): bool {. genericMethod .}
+proc len*[T](self: NSArray[T]): int {. genericMethod .}
+proc first*[T](self: NSArray[T]): T {. genericMethod .}
+proc last*[T](self: NSArray[T]): T {. genericMethod .}
+proc `[]`*[T](self: NSArray[T]; index: culong): T {. genericMethod .}
+# proc `[]`*[T](self: NSArray[T]; index: NSIndexSet): NSArray[T] {. genericMethod .}
+proc index*[T](self: NSArray[T]; obj: T): uint {. genericMethod .}
+proc map*[T](self: NSArray[T]; sel: Selector): void {. genericMethod .}
+proc `==`*[T](self: NSArray[T]; other: NSArray[T]): bool {. genericMethod .}
+
+# objc-module functionality:
+
+proc make*[T](self: typedesc[NSArray[T]]; os: varargs[T]): NSArray[T] =
+  ## Varargs utility function.
+  let
+    (p, l) = toIdPointer os
+  newNSArray[NSObject](self.make(p, l).id)
+
+proc nsarray*[T](os: varargs[T]): NSArray[T] =
+  ## Varargs utility function.
+  NSArray[NSObject].make(os)

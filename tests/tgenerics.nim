@@ -4,9 +4,7 @@ import macros
 
 importClass NSObject
 importClass NSArray[T] of NSObject
-
-proc `[]`*[T: AbstractObject](self: NSArray[T]; index: culong): T
-  {. importMethod: "objectAtIndex:" .}
+importClass NSMutableArray[T] of NSArray[T]
 
 suite "generics":
   test "generic methods":

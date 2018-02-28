@@ -67,6 +67,8 @@ proc isClass*(typ: NimNode): bool =
 proc isObject*(typ: NimNode): bool =
   ## Checks, whether an object type represents an Objective-C object.
   result = false
+  if typ.kind == nnkBracketExpr:
+    return isObject(typ[0].getTypeImpl)
   if typ.kind notin {nnkObjectTy, nnkRefTy, nnkPtrTy}:
     return false
   if typ[0].eqIdent "Object:ObjectType":
@@ -79,9 +81,9 @@ when defined(manualMode):
   template id*(obj: Object): Id =
     ## Converts an Object into an Id.
     cast[Id](obj)
-  template `id=`*(obj: var Object; id: Id) =
+  template `id=`*[T: Object](obj: var T; id: Id) =
     ## Sets the Id of an Object.
-    obj = cast[Object](Id)
+    obj = cast[T](id)
 
   proc newObject*(id: Id): Object =
     ## Creates a newObject from an Id.
