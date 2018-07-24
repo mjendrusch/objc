@@ -1,14 +1,14 @@
 # Package
 
 version       = "0.1.0"
-author        = "Andri Lim"
-description   = "Wrapper for the Objective-C runtime."
+author        = "Michael Jendrusch"
 license       = "MIT"
+description   = "Wrapper for the Objective-C runtime."
 srcDir        = "src"
 
 # Dependencies
 
-requires "nim >= 0.17.3"
+requires "nim >= 0.18.1"
 
 # Configuration
 

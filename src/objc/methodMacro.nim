@@ -26,7 +26,7 @@ proc mangleMethodSelector*(procedure: NimNode): NimNode =
   ## yet overloadable method selector.
   var
     types = genMethodArgTypes(procedure)
-    mangledName = $procedure[0].symbol
+    mangledName = $procedure[0]
   result = newStrLitNode(mangleMethodSelector(mangledName, types))
 
 proc genMethodSelector(procedure: NimNode; name: string = nil): NimNode =
@@ -52,7 +52,7 @@ proc genMethodProc(procedure, name: NimNode): NimNode =
   let
     symbol = procedure[0]
     selfType = procedure[3][1][^2]
-    newCallName = ident("new" & $selfType.symbol)
+    newCallName = ident("new" & $selfType)
   var
     call = newTree(nnkCall, symbol, quote do:
       `newCallName`(self))
@@ -172,7 +172,7 @@ template stretInsanity(typ: untyped; size: int): untyped =
 proc detype(x: NimNode): NimNode =
   ## Strips all nkSym nodes from a Nim tree.
   if x.kind == nnkSym:
-    return ident($x.symbol)
+    return ident($x)
   result = x.copyNimNode
   for child in x.children:
     result.add detype child
@@ -375,7 +375,7 @@ macro importMethod*(messageName: static[string]; procedure: typed): untyped =
 macro importMethodAuto*(procedure: typed): untyped =
   ## Creates Objective-C bindings for a procedure prototype.
   let
-    messageName = $procedure[0].symbol
+    messageName = $procedure[0]
   result = importMethodImpl(messageName, procedure)
   result = result.copyNimTree
 
@@ -392,7 +392,7 @@ macro importMangleAuto*(procedure: typed): untyped =
   ## Creates Objective-C bindings for a procedure prototype, automatically
   ## mangling the message name.
   let
-    messageName = $procedure[0].symbol
+    messageName = $procedure[0]
     mangledName = mangleMethodSelector(messageName,
                                        genMethodArgTypes(procedure))
   result = importMethodImpl(mangledName, procedure)

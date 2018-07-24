@@ -65,12 +65,12 @@ proc makeGenericClassTypeDecl(class, super,
   ## Generates type declarations for generic classes.
   let
     rhsClassArgs = removeTypeQualifiers(classArgs)
-    className = ident($class.ident & "Class")
-    classGenericName = ident($class.ident & "Any")
-    classGenericClassName = ident($class.ident & "AnyClass")
-    classGenericObjectName = ident($class.ident & "AnyObj")
-    classObject = ident($class.ident & "Obj")
-    metaClassName = ident($class.ident & "MetaClass")
+    className = ident($class & "Class")
+    classGenericName = ident($class & "Any")
+    classGenericClassName = ident($class & "AnyClass")
+    classGenericObjectName = ident($class & "AnyObj")
+    classObject = ident($class & "Obj")
+    metaClassName = ident($class & "MetaClass")
 
   if super.isNil:
     if classArgs.len > 0:
@@ -103,10 +103,10 @@ proc makeGenericClassTypeDecl(class, super,
   else:
     let
       rhsSuperArgs = removeTypeQualifiers(superArgs)
-      superClassName = ident($super.ident & "Class")
-      superGenericName = ident($super.ident & "Any")
-      superGenericClassName = ident($super.ident & "AnyClass")
-      superMetaClassName = ident($super.ident & "MetaClass")
+      superClassName = ident($super & "Class")
+      superGenericName = ident($super & "Any")
+      superGenericClassName = ident($super & "AnyClass")
+      superMetaClassName = ident($super & "MetaClass")
     if superArgs.len > 0 and classArgs.len > 0:
       result = quote do:
         type
@@ -250,7 +250,7 @@ proc makeClassUtils*(className, classArgs: NimNode): NimNode =
     converterName = ident"dyn"
     classType = bindsym"Class"
     classString = className.toStrLit
-    newClass = ident("new" & $className.ident)
+    newClass = ident("new" & $className)
 
   if classArgs.len == 0:
     result = quote do:
@@ -286,8 +286,8 @@ proc makeClassUtils*(className, classArgs: NimNode): NimNode =
         res
   else:
     let
-      classNameGeneric = ident($className.ident & "Any")
-      newClassGeneric = ident("new" & $className.ident & "Any")
+      classNameGeneric = ident($className & "Any")
+      newClassGeneric = ident("new" & $className & "Any")
     result = quote do:
       template `classProcName`*(cls: `classNameGeneric`): `classType` =
         class(`classString`)

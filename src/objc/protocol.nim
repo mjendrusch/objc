@@ -56,7 +56,7 @@ proc genConceptDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =
   ## Generates a concept definition for a given nameExpression and required
   ## methods.
   let
-    baseName = $nameExpr.ident
+    baseName = $nameExpr
     conceptName = ident("Abstract" & baseName)
     protocolName = ident(baseName & "Protocol")
     newProcName = ident("new" & baseName)

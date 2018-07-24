@@ -6,7 +6,7 @@ proc genTypeEncoding*(typ: NimNode; pointerDepth: int = 0): string
 proc genPrimitiveTypeEncoding*(typ: NimNode): string =
   ## Generates an Objective-C type encoding for a primitive type.
   expectKind typ, nnkSym
-  let identifier = $typ.symbol
+  let identifier = $typ
   case identifier
   of "int8", "char", "cchar":
     result = "c"
@@ -73,9 +73,9 @@ proc genTypeEncoding*(typ: NimNode; pointerDepth: int = 0): string =
     if typeImplementation.isClass and pointerDepth > 0:
       result = "@"
     elif typeImplementation.isClass:
-      result = "{$#=$#}" % [$typ.symbol, genClassEncoding(typeImplementation)]
+      result = "{$#=$#}" % [$typ, genClassEncoding(typeImplementation)]
     else:
-      result = "{`$#`=$#}" % [$typ.symbol, genFieldEncoding(typeImplementation)]
+      result = "{`$#`=$#}" % [$typ, genFieldEncoding(typeImplementation)]
   of nnkTupleTy:
     result = "{`$#`=$#}" % [genFieldEncoding(typeImplementation)]
   of nnkPtrTy:
