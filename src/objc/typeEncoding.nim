@@ -91,6 +91,100 @@ proc genTypeEncoding*(typ: NimNode; pointerDepth: int = 0): string =
   else:
     error("Unsupported type for encoding: " & $typ.toStrLit & " please file an issue on GitHub.", typ)
 
+proc decodeTypeStringImpl(typeString: string; pos: var int): string =
+  ## Decodes a type encoding string to the corresponding Nim type sourcecode.
+  result = ""
+  echo "converting: ", typeString
+  let
+    length = typeString.len
+  while pos < length:
+    var
+      current = ""
+      c = typeString[pos]
+    case c
+    of '{':
+      inc pos
+      var
+        name = ""
+        fields = ""
+      while c != '=':
+        inc pos
+        c = typeString[pos]
+        name.add c
+      while c != '}':
+        fields.add decodeTypeStringImpl(typeString, pos)
+        c = typeString[pos]
+        echo c
+    of '@':
+      inc pos
+      return "Object"
+    of '^':
+      inc pos
+      c = typeString[pos]
+      if c == '?':
+        inc pos
+        return "proc"
+      else:
+        let
+          pointerType = decodeTypeStringImpl(typeString, pos)
+        return "ptr[" & pointerType & "]"
+    of ':':
+      inc pos
+      return "Selector"
+    of '#':
+      inc pos
+      return "Class"
+    of 'c':
+      inc pos
+      return "int8"
+    of 's':
+      inc pos
+      return "int16"
+    of 'i':
+      inc pos
+      return "int32"
+    of 'l':
+      inc pos
+      return "clong"
+    of 'q':
+      inc pos
+      return "int64"
+    of 'C':
+      inc pos
+      return "uint8"
+    of 'S':
+      inc pos
+      return "uint16"
+    of 'I':
+      inc pos
+      return "uint32"
+    of 'L':
+      inc pos
+      return "culong"
+    of 'Q':
+      inc pos
+      return "uint64"
+    of 'f':
+      inc pos
+      return "float32"
+    of 'd':
+      inc pos
+      return "float64"
+    of 'v':
+      inc pos
+      return "void"
+    of '*':
+      inc pos
+      return "cstring"
+    else:
+      inc pos
+      return "ERRORTYPE"
+
+proc decodeTypeString*(typeString: string): string =
+  var
+    pos = 0
+  decodeTypeStringImpl(typeString, pos)
+
 proc genProcEncoding*(procedure: NimNode): string =
   ## Generates a type encoding for a procedure, to be used for adding methods
   ## to classes.
