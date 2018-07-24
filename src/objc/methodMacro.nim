@@ -34,7 +34,7 @@ proc genMethodSelector(procedure: NimNode; name: string = nil): NimNode =
   let
     mangledSelector = gensym(nskProc)
     symbolString =
-      if name.isNil:
+      if name.len == 0:
         mangleMethodSelector(procedure)
       else:
         newStrLitNode(name)
