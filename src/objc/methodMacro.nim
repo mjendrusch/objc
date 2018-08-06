@@ -45,6 +45,40 @@ proc genMethodSelector(procedure: NimNode; name: string = nil): NimNode =
       $res
     `mangledSelector`()
 
+proc genMethodPrototype*(procedure: NimNode): NimNode =
+  ## Generates a prototype for a procedure, such that it is correctly
+  ## encodable for the Objective-C runtime.
+  let
+    symbol = procedure[0]
+    args = procedure[3]
+  var
+    newArgs = newTree(nnkFormalParams,
+    procedure[3][0],
+    newTree(nnkIdentDefs,
+      ident"self",
+      bindsym"Id",
+      newEmptyNode()),
+    newTree(nnkIdentDefs,
+      ident"selector",
+      bindsym"Selector",
+      newEmptyNode()))
+  for idx in 2 ..< args.len:
+    let identDef = args[idx]
+    newArgs.add identDef.copyNimTree
+
+  result = newTree(nnkProcDef,
+    symbol,
+    newEmptyNode(),
+    newEmptyNode(),
+    newArgs,
+    newTree(nnkPragma, ident"cdecl"),
+    newEmptyNode(),
+    newEmptyNode())
+
+  if not args[0].eqIdent "void":
+    if args[0].getTypeImpl.isObject:
+      result[3][0] = bindsym"Id"
+
 proc genInstanceMethodProc(procedure, name: NimNode): NimNode =
   ## Generates a wrapper for a procedure, such that this wrapper can be used
   ## to attach the given procedure to a class, as an instance method.
@@ -57,34 +91,16 @@ proc genInstanceMethodProc(procedure, name: NimNode): NimNode =
   var
     call = newTree(nnkCall, symbol, quote do:
       `newCallName`(self))
-    newArgs = newTree(nnkFormalParams,
-      procedure[3][0],
-      newTree(nnkIdentDefs,
-        ident"self",
-        bindsym"Id",
-        newEmptyNode()),
-      newTree(nnkIdentDefs,
-        ident"selector",
-        bindsym"Selector",
-        newEmptyNode()))
   let args = procedure[3]
   for idx in 2 ..< args.len:
     let identDef = args[idx]
-    newArgs.add identDef.copyNimTree
     for idy in 0 ..< identDef.len - 2:
       let arg = identDef[idy]
       call.add arg
-  result = newTree(nnkProcDef,
-    name,
-    newEmptyNode(),
-    newEmptyNode(),
-    newArgs,
-    newTree(nnkPragma, ident"cdecl"),
-    newEmptyNode(),
-    newTree(nnkStmtList, call))
+  result = genMethodPrototype(procedure)
+  result.name = name
   if not args[0].eqIdent "void":
     if args[0].getTypeImpl.isObject:
-      result[3][0] = bindsym"Id"
       result[6] = newTree(nnkStmtList,
         newTree(nnkAsgn,
           ident"result",
@@ -109,34 +125,16 @@ proc genClassMethodProc(procedure, name: NimNode): NimNode =
   var
     call = newTree(nnkCall, symbol, quote do:
       `selfType`)
-    newArgs = newTree(nnkFormalParams,
-      procedure[3][0],
-      newTree(nnkIdentDefs,
-        ident"self",
-        bindsym"Id",
-        newEmptyNode()),
-      newTree(nnkIdentDefs,
-        ident"selector",
-        bindsym"Selector",
-        newEmptyNode()))
   let args = procedure[3]
   for idx in 2 ..< args.len:
     let identDef = args[idx]
-    newArgs.add identDef.copyNimTree
     for idy in 0 ..< identDef.len - 2:
       let arg = identDef[idy]
       call.add arg
-  result = newTree(nnkProcDef,
-    name,
-    newEmptyNode(),
-    newEmptyNode(),
-    newArgs,
-    newTree(nnkPragma, ident"cdecl"),
-    newEmptyNode(),
-    newTree(nnkStmtList, call))
+  result = genMethodPrototype(procedure)
+  result.name = name
   if not args[0].eqIdent "void":
     if args[0].getTypeImpl.isObject:
-      result[3][0] = bindsym"Id"
       result[6] = newTree(nnkStmtList,
         newTree(nnkAsgn,
           ident"result",
@@ -149,15 +147,17 @@ proc genClassMethodProc(procedure, name: NimNode): NimNode =
         newTree(nnkAsgn, ident"result", call))
   result = result.copyNimTree
 
+proc prototypeIsClass*(prototype: NimNode): bool =
+  ## Checks, whether a given method prototype indicates a class method.
+  let
+    selfType = prototype[3][1][^2]
+  selfType.kind == nnkBracketExpr and selfType[0].eqIdent("typedesc")
+
 proc genMethodProc(procedure, name: NimNode): tuple[procedure: NimNode; isClass: bool] =
   ## Generates a wrapper for a procedure, such that this wrapper can be used
   ## to attach the given procedure to a class, as an instance method or
   ## class method.
-  let
-    symbol = procedure[0]
-    selfType = procedure[3][1][^2]
-
-  if selfType.kind == nnkBracketExpr and selfType[0].eqIdent("typedesc"):
+  if prototypeIsClass(procedure):
     result.procedure = genClassMethodProc(procedure, name)
     result.isClass = true
   else:

@@ -3,7 +3,7 @@ import unittest
 import macros
 
 objectiveProtocol InitAble:
-    proc init*(self: InitAble): type(self)
+  proc init*(self: InitAble): type(self)
 
 importClass NSObject:
   isa: Class

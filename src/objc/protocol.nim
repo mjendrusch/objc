@@ -1,4 +1,4 @@
-import objc.base, objc.hli, objc.macroCommons, objc.methodMacro
+import objc.base, objc.hli, objc.macroCommons, objc.methodMacro, objc.typeEncoding
 import macros
 
 {. hints: off .}
@@ -42,6 +42,21 @@ proc genConceptCallFromPrototype(prototype: NimNode; selfName: NimNode): NimNode
     result,
     prototype[3][0])
 
+proc genMethodDescriptorsFromPrototype(prototype: NimNode): tuple[
+  selector, encoding: string
+] =
+  ## Generates an encoding string and selector from a method prototype.
+  let
+    encoding = genProcEncoding(genMethodPrototype(prototype))
+    pragma = prototype.pragma
+    selector =
+      if pragma.kind != nnkEmpty:
+        pragma[1].strVal
+      else:
+        $prototype.name
+  result.selector = selector
+  result.encoding = encoding
+
 proc renameInterfaceToAbstract(prototype, typeName, selfName: NimNode): NimNode =
   ## Renames all instances of a ``Protocol`` interface to the ``concept`` name.
   if prototype.kind == nnkIdent and prototype.eqIdent($typeName):
@@ -51,6 +66,49 @@ proc renameInterfaceToAbstract(prototype, typeName, selfName: NimNode): NimNode 
   result = prototype.copyNimNode
   for child in prototype:
     result.add renameInterfaceToAbstract(child, typeName, selfName)
+
+proc genAddProtocolMethod(protocolName, prototype: NimNode): NimNode =
+  ## Adds a class- or instance-method as a required method to a given
+  ## Objective-C runtime protocol.
+  let
+    isClassMethod = prototypeIsClass(prototype)
+    (selector, encoding) = genMethodDescriptorsFromPrototype(prototype)
+  result = quote do:
+    const
+      sel = `selector`
+      enc = `encoding`
+    `protocolName`.addMethodDescription($$sel, enc, true, bool `isClassMethod`)
+
+macro protocolMethod(protocol, prototype: typed): untyped =
+  ## Wrapping inner-layer macro for typed protocol definition.
+  result = genAddProtocolMethod(protocol, prototype)
+
+proc genMacroProtocolMethod(protocol, prototype: NimNode): NimNode =
+  var
+    omittPrototype = prototype.copyNimTree
+  omittPrototype.addPragma(ident"nodecl")
+  omittPrototype.addPragma(ident"importc")
+  omittPrototype.addPragma(ident"used")
+  if omittPrototype[0].kind == nnkPostfix:
+    omittPrototype[0] = omittPrototype.name
+  result = quote do:
+    block:
+      protocolMethod(`protocol`, `omittPrototype`)
+
+proc genProtocolDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =
+  ## Generates an Objective-C runtime protocol from a set of methods,
+  ## and attaches it to the concept of a given name.
+  let
+    name = $toStrLit(nameExpr)
+    protocolName = gensym(nskVar)
+  result = newTree(nnkStmtList)
+  result.add quote do:
+    var
+      `protocolName` = newProtocol(`name`)
+  for prototype in methods:
+    result.add genMacroProtocolMethod(protocolName, prototype)
+  result.add quote do:
+    `protocolName`.register
 
 proc genConceptDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =
   ## Generates a concept definition for a given nameExpression and required
@@ -115,9 +173,11 @@ macro objectiveProtocol*(nameExpr: untyped; body: untyped): untyped =
   var
     methods = getRequiredMethods(body)
     conceptDecl = genConceptDecl(nameExpr, methods)
+    protocolDecl = genProtocolDecl(nameExpr, methods)
     importMethods = genImportMethods(methods)
   result = newTree(nnkStmtList,
     conceptDecl,
+    protocolDecl,
     importMethods)
 
 template `&&&`*(x, y: typedesc): untyped =

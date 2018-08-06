@@ -349,14 +349,15 @@ proc protocols*(): seq[Protocol] =
 template newProtocol*(name: string): untyped =
   objc_allocateProtocol(name.cstring)
 
-template registerProtocol*(proto: Protocol) =
+template register*(proto: Protocol) =
   objc_registerProtocol(proto)
 
 
 template addMethodDescription*(proto: Protocol; name: Selector; types: string;
                                isRequiredMethod, isInstanceMethod: bool) =
-  protocol_addMethodDescription(proto, name, types.cstring, isRequiredMethod,
-                                isInstanceMethod)
+  protocol_addMethodDescription(proto, name, types.cstring,
+                                Boolean isRequiredMethod,
+                                Boolean isInstanceMethod)
 
 template addProtocol*(proto, addition: Protocol) =
   protocol_addProtocol(proto, addition)
