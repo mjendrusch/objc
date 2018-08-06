@@ -84,6 +84,8 @@ macro protocolMethod(protocol, prototype: typed): untyped =
   result = genAddProtocolMethod(protocol, prototype)
 
 proc genMacroProtocolMethod(protocol, prototype: NimNode): NimNode =
+  let
+    protocolMethodSym = bindSym"protocolMethod"
   var
     omittPrototype = prototype.copyNimTree
   omittPrototype.addPragma(ident"nodecl")
@@ -93,7 +95,7 @@ proc genMacroProtocolMethod(protocol, prototype: NimNode): NimNode =
     omittPrototype[0] = omittPrototype.name
   result = quote do:
     block:
-      protocolMethod(`protocol`, `omittPrototype`)
+      `protocolMethodSym`(`protocol`, `omittPrototype`)
 
 proc genProtocolDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =
   ## Generates an Objective-C runtime protocol from a set of methods,
