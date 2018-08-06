@@ -88,7 +88,6 @@ template respondsTo*(cls: Class; sel: Selector): untyped =
 template addProtocol*(cls: Class; protocol: Protocol): untyped =
   class_addProtocol(cls, protocol)
 
-
 proc addProperty*(cls: Class; name: string;
                   attributes: openArray[PropertyAttribute]): bool =
   class_addProperty(cls, name.cstring, attributes[0].unsafeAddr,

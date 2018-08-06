@@ -10,6 +10,7 @@ importClass NSObject:
 
 objectiveClass AClass of NSObject
 
+AClass.attachProtocol InitAble
 proc init*(self: NSObject): NSObject {. importMethodAuto .}
 proc init*(self: AClass): AClass {. importMethodAuto .}
 proc test(self: InitAble): Id = self.id

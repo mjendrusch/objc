@@ -101,7 +101,7 @@ proc genProtocolDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =
   ## Generates an Objective-C runtime protocol from a set of methods,
   ## and attaches it to the concept of a given name.
   let
-    name = $toStrLit(nameExpr)
+    name = $nameExpr
     protocolName = gensym(nskVar)
   result = newTree(nnkStmtList)
   result.add quote do:
@@ -111,6 +111,8 @@ proc genProtocolDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =
     result.add genMacroProtocolMethod(protocolName, prototype)
   result.add quote do:
     `protocolName`.register
+  result.add quote do:
+    template protocol*(typ: typedesc[`nameExpr`]): Protocol = `protocolName`
 
 proc genConceptDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =
   ## Generates a concept definition for a given nameExpression and required
@@ -181,6 +183,12 @@ macro objectiveProtocol*(nameExpr: untyped; body: untyped): untyped =
     conceptDecl,
     protocolDecl,
     importMethods)
+
+template attachProtocol*(c, p: untyped): untyped =
+  var
+    cls: Class = c.class
+    prt: Protocol = p.protocol
+  discard addProtocol(cls, prt)
 
 template `&&&`*(x, y: typedesc): untyped =
   ## `and` conjunction for objc-Protocol concepts.
