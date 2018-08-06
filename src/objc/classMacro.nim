@@ -247,10 +247,15 @@ proc makeClassUtils*(className, classArgs: NimNode): NimNode =
   ## Creates utility templates, procedures and converters for a given class.
   let
     classProcName = ident"class"
+    metaClassProcName = ident"metaClass"
     converterName = ident"dyn"
     classType = bindsym"Class"
     classString = className.toStrLit
     newClass = ident("new" & $className)
+    newClassClass = ident("new" & $className & "Class")
+    newClassMetaClass = ident("new" & $className & "MetaClass")
+    classClassName = ident($className & "Class")
+    classMetaClassName = ident($className & "MetaClass")
 
   if classArgs.len == 0:
     result = quote do:
@@ -258,7 +263,12 @@ proc makeClassUtils*(className, classArgs: NimNode): NimNode =
         class(`classString`)
       template `classProcName`*(clsType: typedesc[`className`]): `classType` =
         class(`classString`)
+      template `metaClassProcName`*(cls: `className`): `classType` =
+        metaClass(`classString`)
+      template `metaClassProcName`*(cls: typedesc[`className`]): `classType` =
+        metaClass(`classString`)
       template id*(cls: typedesc[`className`]): Id = Id(cls.class)
+      template metaId*(cls: typedesc[`className`]): Id = Id(cls.metaClass)
       template `converterName`*(cls: `className`): Id = cls.id
       proc standardDispose(cls: `className`) =
         when defined(objcDebugAlloc):
@@ -284,6 +294,14 @@ proc makeClassUtils*(className, classArgs: NimNode): NimNode =
           echo "RETAINED ", `classString`, ": ", repr(cast[pointer](res.id))
         discard objcMsgSend(id, $$"retain")
         res
+      proc `newClassClass`*(class: Class): `classClassName` =
+        `classClassName`(class: class)
+      proc `newClassMetaClass`*(class: Class): `classMetaClassName` =
+        `classMetaClassName`(class: class)
+      proc `newClassClass`*(class: Id): `classClassName` =
+        `classClassName`(class: Class(class))
+      proc `newClassMetaClass`*(class: Id): `classMetaClassName` =
+        `classMetaClassName`(class: Class(class))
   else:
     let
       classNameGeneric = ident($className & "Any")
@@ -293,7 +311,12 @@ proc makeClassUtils*(className, classArgs: NimNode): NimNode =
         class(`classString`)
       template `classProcName`*(clsType: typedesc[`classNameGeneric`]): `classType` =
         class(`classString`)
+      template `metaClassProcName`*(cls: `classNameGeneric`): `classType` =
+        metaClass(`classString`)
+      template `metaClassProcName`*(cls: typedesc[`classNameGeneric`]): `classType` =
+        metaClass(`classString`)
       template id*(cls: typedesc[`classNameGeneric`]): Id = Id(cls.class)
+      template metaId*(cls: typedesc[`classNameGeneric`]): Id = Id(cls.metaClass)
       template `converterName`*(cls: `className`): Id = cls.id
       proc standardDispose[`classArgs`](cls: `className`[`classArgs`]) =
         when defined(objcDebugAlloc):

@@ -6,6 +6,7 @@ when defined(manualMode):
     ClassType* = object {. inheritable .}
       class*: Class
     MetaClassType* = object {. inheritable .}
+      class*: Class
     Object* = ptr object {. pure, inheritable .}
     SharedObject* = ptr object of Object
     UnsafeObject* = ptr object of Object
@@ -14,6 +15,7 @@ else:
     ClassType* = object {. inheritable .}
       class*: Class
     MetaClassType* = object {. inheritable .}
+      class*: Class
     Object* = ref object of RootObj
       id*: Id
     SharedObject* = ref object of Object

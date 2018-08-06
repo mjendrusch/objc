@@ -83,6 +83,11 @@ suite "method macro":
     check structF20.f == 0'f64
     check structF24.f == 0'f64
 
+  test "create class method":
+    proc testClassMethod(self: typedesc[Test]): int {. objectiveMethod .} =
+      return 42
+    check Test.testClassMethod == 42
+
   test "import method":
     proc anotherFloat(self: Inherit): float {. importMangle: "returnsFloat" .}
     proc returnsInherit(self: Inherit): Inherit {. importMangle: "returnsTest" .}
@@ -124,3 +129,7 @@ suite "method macro":
     check structF16.f == 0'f64
     check structF20.f == 0'f64
     check structF24.f == 0'f64
+
+  test "import class method":
+    proc testInheritMethod(self: typedesc[Inherit]): int {. importMethod: "testClassMethod" .}
+    check Inherit.testInheritMethod == 42

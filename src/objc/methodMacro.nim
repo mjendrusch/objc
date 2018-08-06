@@ -45,14 +45,15 @@ proc genMethodSelector(procedure: NimNode; name: string = nil): NimNode =
       $res
     `mangledSelector`()
 
-proc genMethodProc(procedure, name: NimNode): NimNode =
+proc genInstanceMethodProc(procedure, name: NimNode): NimNode =
   ## Generates a wrapper for a procedure, such that this wrapper can be used
-  ## to attach the given procedure to a class, as an instance method or
-  ## class method.
+  ## to attach the given procedure to a class, as an instance method.
+  ## TODO: make this work with generics.
   let
     symbol = procedure[0]
     selfType = procedure[3][1][^2]
     newCallName = ident("new" & $selfType)
+
   var
     call = newTree(nnkCall, symbol, quote do:
       `newCallName`(self))
@@ -96,6 +97,73 @@ proc genMethodProc(procedure, name: NimNode): NimNode =
         newTree(nnkAsgn, ident"result", call))
   result = result.copyNimTree
 
+proc genClassMethodProc(procedure, name: NimNode): NimNode =
+  ## Generates a wrapper for a procedure, such that this wrapper can be used
+  ## to attach the given procedure to a class, as a class method.
+  let
+    symbol = procedure[0]
+    selfClassType = procedure[3][1][^2]
+    selfType = ident $selfClassType[1]
+    newCallName = ident("new" & $selfType & "Class")
+
+  var
+    call = newTree(nnkCall, symbol, quote do:
+      `selfType`)
+    newArgs = newTree(nnkFormalParams,
+      procedure[3][0],
+      newTree(nnkIdentDefs,
+        ident"self",
+        bindsym"Id",
+        newEmptyNode()),
+      newTree(nnkIdentDefs,
+        ident"selector",
+        bindsym"Selector",
+        newEmptyNode()))
+  let args = procedure[3]
+  for idx in 2 ..< args.len:
+    let identDef = args[idx]
+    newArgs.add identDef.copyNimTree
+    for idy in 0 ..< identDef.len - 2:
+      let arg = identDef[idy]
+      call.add arg
+  result = newTree(nnkProcDef,
+    name,
+    newEmptyNode(),
+    newEmptyNode(),
+    newArgs,
+    newTree(nnkPragma, ident"cdecl"),
+    newEmptyNode(),
+    newTree(nnkStmtList, call))
+  if not args[0].eqIdent "void":
+    if args[0].getTypeImpl.isObject:
+      result[3][0] = bindsym"Id"
+      result[6] = newTree(nnkStmtList,
+        newTree(nnkAsgn,
+          ident"result",
+          quote do:
+            `call`.id
+        )
+      )
+    else:
+      result[6] = newTree(nnkStmtList,
+        newTree(nnkAsgn, ident"result", call))
+  result = result.copyNimTree
+
+proc genMethodProc(procedure, name: NimNode): tuple[procedure: NimNode; isClass: bool] =
+  ## Generates a wrapper for a procedure, such that this wrapper can be used
+  ## to attach the given procedure to a class, as an instance method or
+  ## class method.
+  let
+    symbol = procedure[0]
+    selfType = procedure[3][1][^2]
+
+  if selfType.kind == nnkBracketExpr and selfType[0].eqIdent("typedesc"):
+    result.procedure = genClassMethodProc(procedure, name)
+    result.isClass = true
+  else:
+    result.procedure = genInstanceMethodProc(procedure, name)
+    result.isClass = false
+
 # macro objectiveMethod*(importString: typed; procedure: typed): untyped =
 #   ## Adds a procedure to an Objective-C runtime class.
 #   let
@@ -116,15 +184,23 @@ macro objectiveMethod*(procedure: typed): untyped =
   let
     class = procedure[3][1][^2]
     procName = gensym(nskProc)
-    methodProcedure = genMethodProc(procedure, procName)
+    (methodProcedure, isClass) = genMethodProc(procedure, procName)
     methodSelector = genMethodSelector(procedure, nil)
     encoding = genProcEncoding(methodProcedure)
     implementation = bindsym"Implementation"
-  result = quote do:
-    `methodProcedure`
-    discard addMethod(`class`.class, $$`methodSelector`,
-                      cast[`implementation`](`procName`),
-                      `encoding`)
+
+  if isClass:
+    result = quote do:
+      `methodProcedure`
+      discard addMethod(`class`.metaClass, $$`methodSelector`,
+                        cast[`implementation`](`procName`),
+                        `encoding`)
+  else:
+    result = quote do:
+      `methodProcedure`
+      discard addMethod(`class`.class, $$`methodSelector`,
+                        cast[`implementation`](`procName`),
+                        `encoding`)
   result = result.copyNimTree
 
 proc makeImportMethodCallArgs*(args: NimNode): tuple[args, types: NimNode] =
