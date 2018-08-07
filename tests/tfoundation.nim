@@ -1,5 +1,5 @@
 import objc
-import objc.foundation
+import objc/foundation
 import unittest
 
 proc mk*(self: typedesc[NSArray]; o1, o2: Id): NSArray =

@@ -1,4 +1,4 @@
-import objc.base, objc.macroCommons, objc.typeEncoding
+import objc / [base, macroCommons, typeEncoding]
 import macros
 
 proc genMethodArgTypes*(procedure: NimNode): seq[NimNode] =

@@ -1,4 +1,4 @@
-import objc.macroCommons, objc.hli, objc.base
+import objc / [macroCommons, hli, base]
 import macros
 
 when not defined(objcStrict):

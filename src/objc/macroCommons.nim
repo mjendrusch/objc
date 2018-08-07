@@ -1,4 +1,4 @@
-import objc.base, objc.hli
+import objc / [base, hli]
 import macros
 
 when defined(manualMode):

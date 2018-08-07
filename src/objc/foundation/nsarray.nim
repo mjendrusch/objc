@@ -1,6 +1,6 @@
 import objc
 import nsobject
-import objc.utils.varargsObjectToIdPointer
+import objc/utils/varargsObjectToIdPointer
 # import nsindexset
 
 importClass NSArray[T] of NSObject

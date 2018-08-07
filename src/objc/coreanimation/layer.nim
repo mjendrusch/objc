@@ -1,4 +1,4 @@
 import objc
-import objc.foundation
+import objc/foundation
 
 importClass CALayer of NSObject

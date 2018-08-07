@@ -1,4 +1,4 @@
-import objc.macroCommons
+import objc/macroCommons
 import macros, strutils
 
 proc genTypeEncoding*(typ: NimNode; pointerDepth: int = 0): string

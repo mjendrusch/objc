@@ -1,5 +1,5 @@
 import objc
-import objc.foundation
+import objc/foundation
 
 importClass UIApplication of NSObject
 

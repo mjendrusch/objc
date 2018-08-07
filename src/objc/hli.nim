@@ -1,4 +1,4 @@
-import objc.base, objc.cutils
+import objc / [base, cutils]
 
 template `==`*(c1, c2: Class): bool =
   ## Equality operator for `Class`.

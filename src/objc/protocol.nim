@@ -1,4 +1,4 @@
-import objc.base, objc.hli, objc.macroCommons, objc.methodMacro, objc.typeEncoding
+import objc / [base, hli, macroCommons, methodMacro, typeEncoding]
 import macros
 
 {. hints: off .}

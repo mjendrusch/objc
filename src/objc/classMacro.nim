@@ -1,4 +1,4 @@
-import objc.base, objc.hli, objc.typeEncoding, objc.macroCommons, objc.methodCallMacro, objc.methodMacro
+import objc / [base, hli, typeEncoding, macroCommons, methodCallMacro, methodMacro]
 import macros
 
 proc makeClassNames(nameExpr: NimNode): tuple[class, super, classArgs, superArgs: NimNode] =
