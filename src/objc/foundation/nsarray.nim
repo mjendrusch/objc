@@ -1,7 +1,7 @@
 import objc
 import nsobject
 import objc.utils.varargsObjectToIdPointer
-# import nsindexse
+# import nsindexset
 
 importClass NSArray[T] of NSObject
 importClass NSMutableArray[T] of NSArray[T]

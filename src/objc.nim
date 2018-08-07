@@ -4,6 +4,7 @@ import objc.typeEncoding
 import objc.macroCommons
 import objc.classMacro
 import objc.methodMacro
+import objc.propertyMacro
 import objc.methodCallMacro
 import objc.protocol
 export hli
@@ -12,5 +13,6 @@ export typeEncoding
 export macroCommons
 export classMacro
 export methodMacro
+export propertyMacro
 export methodCallMacro
 export protocol
