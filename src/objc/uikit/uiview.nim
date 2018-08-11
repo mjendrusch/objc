@@ -1,13 +1,22 @@
 import objc
 import objc/foundation
 import objc/coregraphics
-import uicolor
+import uiclasses
 
-importClass UIView of NSObject
+type
+  UIViewTintAdjustmentMode* = distinct int
+  UIViewContentMode* = distinct int
+  UIViewAutoresizing* = distinct int
+  UISemanticContentAttribute* = distinct int
+  UIUserInterfaceLayoutDirection* = distinct int
+  UIEdgeInsets* = object
+    top, left, bottom, right: cdouble
+
+importClass UILayoutGuide of NSObject
 
 proc init*(self: UIView; frame: CGRect): UIView {. importMethod: "initWithFrame:" .}
 proc init*(self: UIView; coder: NSCoder): UIView {. importMethod: "initWithCoder:" .}
-#
+
 UIView.importProperties:
   backgroundColor is UIColor
   alpha is CGFloat
@@ -19,7 +28,7 @@ UIView.importProperties:
   frame is CGRect
   bounds is CGRect
   center is CGPoint
-  transform is CGAffineTransform
+  # transform is CGAffineTransform
   directionalLayoutMargins is NSDirectionalEdgeInsets
   layoutMargins is UIEdgeInsets
   preservesSuperviewLayoutMargins is Boolean
@@ -29,10 +38,10 @@ UIView.importProperties:
   autoresizeingMask is UIViewAutoresizing
   translatesAutoresizingMaskIntoConstraints is Boolean
   semanticContentAttribute is UISemanticContentAttribute
-  interactions is NSArray[UIInteraction]
+  # interactions is NSArray[UIInteraction]
   contentScaleFactor is CGFloat
-  gestureRecognizers is NSArray[UIGestureRecognizer]
-  motionEffects is NSArray[UIMotionEffect]
+  # gestureRecognizers is NSArray[UIGestureRecognizer]
+  # motionEffects is NSArray[UIMotionEffect]
   restorationIdentifier is NSString
   tag is NSInteger
   accessibilityIgnoresInvertColors is Boolean
@@ -68,10 +77,28 @@ UIView.importProperties:
   (window is UIWindow)[readonly = true]
   (superview is UIView)[readonly = true]
   (subview is NSArray[UIView])[readonly = true]
-  (layer is CALayer)[readonly = true]
+  # (layer is CALayer)[readonly = true]
   (layerClass is Class)[readonly = true]
   (opaque is Boolean)[getName = "isOpaque"]
   (hidden is Boolean)[getName = "isHidden"]
   (userInteractionEnabled is Boolean)[getName = "isUserInteractionEnabled"]
   (multiTouchEnabled is Boolean)[getName = "isMultiTouchEnabled"]
   (exclusiveTouch is Boolean)[getName = "isExclusiveTouch"]
+
+proc addSubview*(self: UIView; view: UIView): void {. importMethod: "addSubview:" .}
+proc bringToFront*(self: UIView; view: UIView): void {. importMethod: "bringSubviewToFront:" .}
+proc sendToBack*(self: UIView; view: UIView): void {. importMethod: "sendSubviewToBack:" .}
+proc detach*(self: UIView): void {. importMethod: "removeFromSuperview" .}
+proc insert*(self: UIView; view: UIView; index: NSInteger): void {. importMethod: "insertSubview:atIndex:" .}
+proc insertAbove*(self: UIView; view: UIView; lower: UIView): void {. importMethod: "insertSubview:aboveSubview:" .}
+proc insertBelow*(self: UIView; view: UIView; upper: UIView): void {. importMethod: "insertSubview:belowSubview:" .}
+proc exchange*(self: UIView; idx, idy: NSInteger): void {. importMethod: "exchangeSubviewAtIndex:withSubviewAtIndex:" .}
+proc descendant*(self: UIView; ancestor: UIView): Boolean {. importMethod: "isDescendantOfView:" .}
+
+# observe changes
+
+proc added*(self: UIView; view: UIView): void {. importMethod: "didAddSubview:" .}
+proc willRemove*(self: UIView; view: UIView): void {. importMethod: "willRemoveSubview:" .}
+proc willMove*(self: UIView; view: UIView): void {. importMethod: "willMoveToSuperview:" .}
+proc didMove*(self: UIView; view: UIView): void {. importMethod: "didMoveToSuperview:" .}
+

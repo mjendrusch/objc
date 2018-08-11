@@ -1,8 +1,7 @@
 import objc
 import objc/foundation
+import uiclasses
 
-importClass UIColor of NSObject
-#
 UIColor.importProperties:
   (darkTextColor is UIColor)[class = true, readonly = true]
   (lightTextColor is UIColor)[class = true, readonly = true]

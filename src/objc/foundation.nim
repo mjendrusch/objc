@@ -1,8 +1,4 @@
-import foundation/nsobject
-import foundation/nsarray
-import foundation/nsstring
-export nsarray
-export nsobject
-export nsstring
+import foundation / [nsobject, nsarray, nsstring, nscoder, nsmisc]
+export nsarray, nsobject, nsstring, nscoder, nsmisc
 
 {. passL: "-framework Foundation" .}
