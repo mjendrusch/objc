@@ -39,8 +39,8 @@ type
     superClass*: Class
 
   PropertyAttribute* = object
-    name*: string
-    value*: string
+    name*: cstring
+    value*: cstring
 
   ExceptionFunctions* = object
     version*: cint
@@ -113,7 +113,7 @@ proc objc_constructInstance*(cls: Class; bytes: pointer): Id {. objcimport .}
 proc objc_destructInstance*(obj: Id): pointer {. objcimport .}
 proc object_copy*(obj: Id; size: csize): Id {. objcimport .}
 proc object_setInstanceVariable*(obj: Id; name: cstring; value: pointer): Ivar {. objcimport .}
-proc object_getInstanceVariable*(obj: Id; name: cstring; outValue: var pointer): Ivar {. objcimport .}
+proc object_getInstanceVariable*(obj: Id; name: cstring; outValue: ptr pointer): Ivar {. objcimport .}
 proc object_getIndexedIvars*(obj: Id): pointer {. objcimport .}
 proc object_getIvar*(obj: Id; ivar: Ivar): Id {. objcimport .}
 proc object_setIvar*(obj: Id; ivar: Ivar; value: Id) {. objcimport .}
@@ -135,8 +135,8 @@ proc objc_removeAssociatedObjects*(obj: Id) {. objcimport .}
 proc objc_msgSend*(self: Id; op: Selector): Id {.objcimport,varargs.}
 proc objc_msgSend_fpret*(self: Id; op: Selector): cdouble {.objcimport,varargs.}
 proc objc_msgSend_stret*(self: Id; op: Selector) {.objcimport,varargs.}
-proc objc_msgSendSuper*(super: var Super; op: Selector): Id {.objcimport,varargs.}
-proc objc_msgSendSuper_stret*(super: var Super; op: Selector) {.objcimport,varargs.}
+proc objc_msgSendSuper*(super: ptr Super; op: Selector): Id {.objcimport,varargs.}
+proc objc_msgSendSuper_stret*(super: ptr Super; op: Selector) {.objcimport,varargs.}
 proc method_invoke*(receiver: Id; m: Method): Id {.objcimport,varargs.}
 proc method_invoke_stret*(receiver: Id; m: Method) {.objcimport,varargs.}
 proc sel_getName*(sel: Selector): cstring {. objcimport .}

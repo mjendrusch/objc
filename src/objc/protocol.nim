@@ -114,6 +114,13 @@ proc genProtocolDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =
   result.add quote do:
     template protocol*(typ: typedesc[`nameExpr`]): Protocol = `protocolName`
 
+proc genProtocolImport(nameExpr: NimNode): NimNode =
+  ## Generates imports for an Objective-C runtime protocol.
+  let
+    name = $nameExpr
+  result = quote do:
+    template protocol*(typ: typedesc[`nameExpr`]): Protocol = protocol(`name`)
+
 proc genConceptDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =
   ## Generates a concept definition for a given nameExpression and required
   ## methods.
@@ -162,13 +169,34 @@ proc genConceptDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =
       ## corresponding to that protocol.
       `resultName` = `newProcName`(prot)
 
+proc getMethodSelector(mtd: NimNode): string =
+  ## Returns a method's selector pragma, if available.
+  let
+    pragma = mtd.pragma
+  result = ""
+  for child in pragma.children:
+    if child.kind == nnkExprColonExpr and child[0].eqIdent("selector"):
+      result = child[1].strVal
+      break
+
 proc genImportMethods(methods: seq[NimNode]): NimNode =
   ## Generates imports for all methods required for a protocol.
+  let
+    importSym = bindsym"importMethodNoSuper"
+    importMangleSym = bindsym"importMangleAutoNoSuper"
   result = newNimNode(nnkStmtList)
   for mtd in methods:
     var
       newMethod = mtd.copyNimTree
-    newMethod[4] = newTree(nnkPragma, bindsym"importMangleAuto")
+      selector = mtd.getMethodSelector
+    if selector.len == 0:
+      newMethod[4] = newTree(nnkPragma,
+        importMangleSym)
+    else:
+      newMethod[4] = newTree(nnkPragma,
+        newTree(nnkExprColonExpr,
+          importSym,
+          newStrLitNode(selector)))
     result.add(newMethod)
 
 macro objectiveProtocol*(nameExpr: untyped; body: untyped): untyped =
@@ -184,8 +212,21 @@ macro objectiveProtocol*(nameExpr: untyped; body: untyped): untyped =
     protocolDecl,
     importMethods)
 
-template attachProtocol*(c, p: untyped): untyped =
+macro importProtocol*(nameExpr: untyped; body: untyped): untyped =
+  ## Imports an Objective-C protocol and adds the resulting
+  ## concept and generics.
   var
+    methods = getRequiredMethods(body)
+    conceptDecl = genConceptDecl(nameExpr, methods)
+    protocolDecl = genProtocolImport(nameExpr)
+    importMethods = genImportMethods(methods)
+  result = newTree(nnkStmtList,
+    conceptDecl,
+    protocolDecl,
+    importMethods)
+
+template attachProtocol*(c, p: untyped): untyped =
+  let
     cls: Class = c.class
     prt: Protocol = p.protocol
   discard addProtocol(cls, prt)

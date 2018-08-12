@@ -1,5 +1,5 @@
 import objc / [base, hli, typeEncoding, macroCommons, methodCallMacro, methodMacro]
-import macros
+import macros, strutils
 
 proc makeClassNames(nameExpr: NimNode): tuple[class, super, classArgs, superArgs: NimNode] =
   ## Gets identifiers for super class and new class from a
@@ -209,6 +209,41 @@ proc makeClassIvars(decls: NimNode; classVariable: NimNode): NimNode =
   for decl in decls:
     result.add makeSingleIvar(decl, classVariable)
 
+proc makeSingleProperty(className, decl: NimNode): NimNode =
+  let
+    classVariable = newTree(nnkCall,
+      ident"class",
+      className)
+    ivarName = decl[0].toStrLit
+    ivarEqName = "set" & toUpperAscii($ivarName) & ":"
+    ivarIdent = ident($decl[0])
+    ivarEqIdent = ident($decl[0] & "=")
+    ivarType = decl[1][0]
+    encodeMacro = bindsym"encode"
+    self = ident"self"
+    value = ident"val"
+  result = quote do:
+    var
+      attrs = [
+        PropertyAttribute(name: "T", value: `encodeMacro`(`ivarType`)),
+        PropertyAttribute(name: "V", value: `ivarName`)
+      ]
+    discard `classVariable`.addProperty(`ivarName`, attrs)
+    proc `ivarIdent`*(`self`: `className`): `ivarType` {. objectiveSelector: `ivarName` .} =
+      var
+        resultPtr = `self`.id.getInstanceVariablePointer(`ivarName`)
+      cast[ptr `ivarType`](resultPtr)[]
+    proc `ivarEqIdent`*(`self`: `className`; `value`: `ivarType`): void {. objectiveSelector: `ivarEqName` .} =
+      var
+        resultPtr =  `self`.id.getInstanceVariablePointer(`ivarName`)
+      cast[ptr `ivarType`](resultPtr)[] = `value`
+    
+proc makeClassProperties(className, decls: NimNode): NimNode =
+  ## Adds properties corresponding to all Ivars in a class.
+  result = newNimNode(nnkStmtList)
+  for decl in decls:
+    result.add makeSingleProperty(className, decl)
+
 proc makeClassVariable(class, super, decls: NimNode): NimNode =
   ## Creates an Objective-C runtime Class variable, tied
   ## to a Nim type of name `class`.
@@ -380,11 +415,13 @@ macro objectiveClass*(nameExpr: untyped, decls: untyped): untyped =
     typeDecl = makeClassTypeDecl(className, superName, classArgs, superArgs, decls)
     classVariable = makeClassVariable(className, superName, decls)
     classUtilities = makeClassUtils(className, classArgs)
+    classProperties = makeClassProperties(className, decls)
     superTemplates = makeSuperTemplates(className, superName)
   result = newTree(nnkStmtList,
     typeDecl,
     classVariable,
     classUtilities,
+    classProperties,
     superTemplates
   )
 

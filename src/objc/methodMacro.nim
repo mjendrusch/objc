@@ -111,6 +111,9 @@ proc genInstanceMethodProc(procedure, name: NimNode): NimNode =
     else:
       result[6] = newTree(nnkStmtList,
         newTree(nnkAsgn, ident"result", call))
+  else:
+    result[6] = newTree(nnkStmtList,
+      call)
   result = result.copyNimTree
 
 proc genClassMethodProc(procedure, name: NimNode): NimNode =
@@ -203,12 +206,42 @@ macro objectiveMethod*(procedure: typed): untyped =
                         `encoding`)
   result = result.copyNimTree
 
-proc makeImportMethodCallArgs*(args: NimNode): tuple[args, types: NimNode] =
+macro objectiveSelector*(str: typed; procedure: typed): untyped =
+  ## Adds a procedure to an Objective-C runtime class.
+  let
+    class = procedure[3][1][^2]
+    procName = gensym(nskProc)
+    (methodProcedure, isClass) = genMethodProc(procedure, procName)
+    methodSelector = str#genMethodSelector(procedure, nil)
+    encoding = genProcEncoding(methodProcedure)
+    implementation = bindsym"Implementation"
+
+  if isClass:
+    result = quote do:
+      `methodProcedure`
+      discard addMethod(`class`.metaClass, $$`methodSelector`,
+                        cast[`implementation`](`procName`),
+                        `encoding`)
+  else:
+    result = quote do:
+      `methodProcedure`
+      discard addMethod(`class`.class, $$`methodSelector`,
+                        cast[`implementation`](`procName`),
+                        `encoding`)
+  result = result.copyNimTree
+
+proc makeImportMethodCallArgs*(args: NimNode; isSuper: bool = false): tuple[args, types: NimNode] =
   ## Creates the call arguments for the static method call of an imported
   ## method.
   result.args = newTree(nnkArgList)
   result.types = newTree(nnkArgList)
-  result.types.add newTree(nnkIdentDefs, ident"self", bindsym"Id", newEmptyNode())
+  if isSuper:
+    result.types.add newTree(nnkIdentDefs,
+      ident"self",
+      newTree(nnkPtrTy, bindsym"Super"),
+      newEmptyNode())
+  else:
+    result.types.add newTree(nnkIdentDefs, ident"self", bindsym"Id", newEmptyNode())
   result.types.add newTree(nnkIdentDefs, ident"sel", bindsym"Selector", newEmptyNode())
   for idx in 2 ..< args.len:
     let
@@ -239,11 +272,17 @@ proc makeImportMethodCallArgs*(args: NimNode): tuple[args, types: NimNode] =
   result.args = result.args.copyNimTree
   result.types = result.types.copyNimTree
 
-template stretInsanity(typ: untyped; size: int): untyped =
-  if sizeof(typ) <= size:
-    cast[pointer](objcMsgSend)
+template stretInsanity(typ: untyped; size: int; isSuper: static[bool]): untyped =
+  when isSuper:
+    if sizeof(typ) <= size:
+      cast[pointer](objcMsgSendSuper)
+    else:
+      cast[pointer](objcMsgSendSuperStret)
   else:
-    cast[pointer](objcMsgSendStret)
+    if sizeof(typ) <= size:
+      cast[pointer](objcMsgSend)
+    else:
+      cast[pointer](objcMsgSendStret)
 
 proc detype(x: NimNode): NimNode =
   ## Strips all nkSym nodes from a Nim tree.
@@ -370,50 +409,65 @@ proc genConstructorName(typ: NimNode): tuple[name, args: NimNode] =
   result.name = result.name.copyNimTree
   result.args = result.args.copyNimTree
 
-proc importMethodImpl(messageName: string; typedProcedure: NimNode): NimNode =
+proc importStandardImpl(messageName: string; typedProcedure: NimNode; isSuper: bool = false): NimNode =
   ## Implements Objective-C runtime method import.
   let
     procedure = sanitizeGenericArgs(typedProcedure)
+    msgSend =
+      if isSuper:
+        bindsym"objcMsgSendSuper"
+      else:
+        bindsym"objcMsgSend"
+    msgSendFloat =
+      if isSuper:
+        bindsym"objcMsgSendSuper"
+      else:
+        bindsym"objcMsgSendFpRet"
+    msgSendStruct =
+      if isSuper:
+        bindsym"objcMsgSendSuperStret"
+      else:
+        bindsym"objcMsgSendStret"
     args = procedure[3]
     self = newTree(nnkDotExpr,
       args[1][0].copyNimTree,
       ident"id")
     returnType = args[0]
     returnTypeImpl = returnType.getTypeImpl
-    (callArgs, callArgTypes) = makeImportMethodCallArgs(args)
+    (callArgs, callArgTypes) = makeImportMethodCallArgs(args, isSuper = isSuper)
     castType = makeProcedurePointerType(returnType, callArgTypes, args)
   result = procedure.copyNimTree
 
   if returnType == bindsym"void":
     result[6] = quote do:
-      discard objcMsgSend(`self`, $$`messageName`, `callArgs`)
+      discard `msgSend`(`self`, $$`messageName`, `callArgs`)
   elif returnType == bindsym"float" or returnType == bindsym"float32" or
        returnType == bindsym"float64":
     let
       funp = gensym(nskLet)
     result[6] = quote do:
-      let `funp` = cast[`castType`](objcMsgSendFpRet)
+      let `funp` = cast[`castType`](`msgSendFloat`)
       return `funp`(`self`, $$`messageName`, `callArgs`)
   elif returnType.typeKind in {ntyTuple, ntyObject}:
     # XXX: this is insane!
     # We are choosing whether to use objcMsgSend or objcMsgSendStret, depending
     # on the target architecture and object size.
     var
-      whichMsgSend = bindsym"objcMsgSendStret"
+      whichMsgSend = msgSendStruct
       stretTemplate = bindsym"stretInsanity"
     case hostCPU
     of "amd64", "powerpc64", "arm64":
       whichMsgSend = quote do:
-        `stretTemplate`(`returnType`, 16)
+        `stretTemplate`(`returnType`, 16, bool `isSuper`)
     of "i386":
       whichMsgSend = quote do:
-        `stretTemplate`(`returnType`, 8)
+        `stretTemplate`(`returnType`, 8, bool `isSuper`)
     of "powerpc":
       whichMsgSend = quote do:
-        `stretTemplate`(`returnType`, 0)
+        `stretTemplate`(`returnType`, 0, bool `isSuper`)
     of "arm":
       whichMsgSend = quote do:
-        `stretTemplate`(`returnType`, 4)
+        `stretTemplate`(`returnType`, 4, bool `isSuper`)
     else:
       discard
     let
@@ -428,51 +482,144 @@ proc importMethodImpl(messageName: string; typedProcedure: NimNode): NimNode =
       funp = gensym(nskLet)
     if args.kind == nnkEmpty:
       result[6] = quote do:
-        let `funp` = cast[`castType`](objcMsgSend)
+        let `funp` = cast[`castType`](`msgSend`)
         `newResult`(`funp`(`self`, $$`messageName`, `callArgs`))
     else:
       result[6] = quote do:
-        let `funp` = cast[`castType`](objcMsgSend)
+        let `funp` = cast[`castType`](`msgSend`)
         `newResult`[`args`](`funp`(`self`, $$`messageName`, `callArgs`))
   else:
     let
       funp = gensym(nskLet)
     result[6] = quote do:
-      let `funp` = cast[`castType`](objcMsgSend)
+      let `funp` = cast[`castType`](`msgSend`)
       return `funp`(`self`, $$`messageName`, `callArgs`)
   result = sanitizeProcParams(result)
   result = result.copyNimTree
 
-macro importMethod*(messageName: static[string]; procedure: typed): untyped =
-  ## Creates Objective-C bindings for a procedure prototype.
-  result = importMethodImpl(messageName, procedure)
-  result = result.copyNimTree
+proc importSuperImpl(messageName: string; typedProcedure: NimNode;
+                     shouldExport: bool): NimNode =
+  ## Implements Objective-C runtime superclass method import.
+  var
+    newProcedure = typedProcedure.copyNimTree
+    selfType = newProcedure[3][1][^2]
+  if selfType.kind == nnkBracketExpr and selfType[0].eqIdent("typedesc"):
+    return newTree(nnkDiscardStmt, newEmptyNode())
+  newProcedure[3][1][^2] = newTree(nnkBracketExpr,
+    ident"AsSuper",
+    typedProcedure[3][1][^2])
+  result = importStandardImpl(messageName, newProcedure, isSuper = true)
+  if shouldExport:
+    result[0] = newTree(nnkPostfix, ident"*", ident($newProcedure[0]))
+  else:
+    result[0] = ident($newProcedure[0])
 
-macro importMethodAuto*(procedure: typed): untyped =
+proc importMethodImpl(messageName: string; typedProcedure: NimNode;
+                      shouldExport: bool;
+                      isSuper: bool = false;
+                      isSelf: bool = true): NimNode =
+  ## Implements Objective-C runtime method import.
+  result = newTree(nnkStmtList)
+  if isSuper:
+    let
+      super = importSuperImpl(messageName, typedProcedure, shouldExport)
+    result.add super
+  if isSelf:
+    let
+      self = importStandardImpl(messageName, typedProcedure)
+    result.add self
+
+macro importSuperTyped(messageName: static[string]; procedure: typed;
+                        shouldExport: static[bool]): untyped =
+  ## Creates Objective-C bindings for a procedure prototype.
+  result = importMethodImpl(messageName, procedure, shouldExport,
+                            isSuper = true, isSelf = false)
+
+macro importMethodTyped(messageName: static[string]; procedure: typed;
+                        shouldExport: static[bool]): untyped =
+  ## Creates Objective-C bindings for a procedure prototype.
+  result = importMethodImpl(messageName, procedure, shouldExport,
+                            isSuper = true)
+
+macro importMethodNoSuperTyped(messageName: static[string]; procedure: typed;
+                               shouldExport: static[bool]): untyped =
+  ## Creates Objective-C bindings for a procedure prototype.
+  result = importMethodImpl(messageName, procedure, shouldExport,
+                            isSuper = false)
+
+macro importMethodAutoTyped(procedure: typed; shouldExport: static[bool]): untyped =
   ## Creates Objective-C bindings for a procedure prototype.
   let
     messageName = $procedure[0]
-  result = importMethodImpl(messageName, procedure)
+  result = importMethodImpl(messageName, procedure, shouldExport,
+                            isSuper = true)
   result = result.copyNimTree
 
-macro importMangle*(messageName: static[string]; procedure: typed): untyped =
+macro importMangleTyped(messageName: static[string]; procedure: typed;
+                    shouldExport: static[bool]): untyped =
   ## Creates Objective-C bindings for a procedure prototype, automatically
   ## mangling the message name.
   let
     mangledName = mangleMethodSelector(messageName,
                                        genMethodArgTypes(procedure))
-  result = importMethodImpl(mangledName, procedure)
+  result = importMethodImpl(mangledName, procedure, shouldExport,
+                            isSuper = true)
   result = result.copyNimTree
 
-macro importMangleAuto*(procedure: typed): untyped =
+macro importMangleAutoTyped(procedure: typed; shouldExport: static[bool]): untyped =
   ## Creates Objective-C bindings for a procedure prototype, automatically
   ## mangling the message name.
   let
     messageName = $procedure[0]
     mangledName = mangleMethodSelector(messageName,
                                        genMethodArgTypes(procedure))
-  result = importMethodImpl(mangledName, procedure)
+  result = importMethodImpl(mangledName, procedure, shouldExport,
+                            isSuper = true)
   result = result.copyNimTree
+
+macro importMangleAutoNoSuperTyped(procedure: typed; shouldExport: static[bool]): untyped =
+  ## Creates Objective-C bindings for a procedure prototype, automatically
+  ## mangling the message name.
+  let
+    messageName = $procedure[0]
+    mangledName = mangleMethodSelector(messageName,
+                                       genMethodArgTypes(procedure))
+  result = importMethodImpl(mangledName, procedure, shouldExport,
+                            isSuper = false)
+  result = result.copyNimTree
+
+template createImportMethod(name: untyped, selector: static[string]): untyped =
+  macro `name`*(messageName, procedure: untyped): untyped =
+    let
+      shouldExport = procedure[0].kind == nnkPostfix
+      typedName = bindsym(selector)
+    result = newTree(nnkCall,
+      typedName,
+      messageName,
+      procedure,
+      newTree(nnkCall,
+        ident"bool",
+        newIntLitNode(int shouldExport)))
+
+template createImportMethodAuto(name: untyped, selector: static[string]): untyped =
+  macro `name`*(procedure: untyped): untyped =
+    let
+      shouldExport = procedure[0].kind == nnkPostfix
+      typedName = bindsym(selector)
+    result = newTree(nnkCall,
+      typedName,
+      procedure,
+      newTree(nnkCall,
+        ident"bool",
+        newIntLitNode(int shouldExport)))
+
+createImportMethod(importMethod, "importMethodTyped")
+createImportMethod(importSuper, "importSuperTyped")
+createImportMethod(importMethodNoSuper, "importMethodNoSuperTyped")
+createImportMethodAuto(importMethodAuto, "importMethodAutoTyped")
+createImportMethod(importMangle, "importMangleTyped")
+createImportMethodAuto(importMangleAuto, "importMangleAutoTyped")
+createImportMethodAuto(importMangleAutoNoSuper, "importMangleAutoNoSuperTyped")
 
 macro genericMethod*(prototype: untyped): untyped =
   ## Given a method defined for the ``XAny`` type of a class ``X``,

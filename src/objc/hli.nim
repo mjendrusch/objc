@@ -159,7 +159,12 @@ template setInstanceVariable*(obj: Id; name: string; value: pointer): untyped =
 
 template getInstanceVariable*(obj: Id; name: string;
                               outValue: var pointer): untyped =
-  object_getInstanceVariable(obj, name.cstring, outValue)
+  object_getInstanceVariable(obj, name.cstring, outValue.addr)
+
+proc getInstanceVariablePointer*(obj: Id; name: string): pointer =
+  let
+    ivar = class_getInstanceVariable(object_getClass(obj), name)
+  result = cast[pointer](cast[PtrDiff](obj) + ivar_getOffset(ivar))
 
 template getIndexedIvars*(obj: Id): untyped =
   object_getIndexedIvars(obj)

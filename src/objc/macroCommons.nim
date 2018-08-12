@@ -8,6 +8,9 @@ when defined(manualMode):
     MetaClassType* = object {. inheritable .}
       class*: Class
     Object* = ptr object {. pure, inheritable .}
+    AsSuper*[Obj] = object
+      obj: Obj
+      class: Class
     SharedObject* = ptr object of Object
     UnsafeObject* = ptr object of Object
 else:
@@ -18,6 +21,9 @@ else:
       class*: Class
     Object* = ref object of RootObj
       id*: Id
+    AsSuper*[Obj] = object
+      obj: Obj
+      class: Class
     SharedObject* = ref object of Object
     UnsafeObject* = object of Object
 
@@ -31,6 +37,14 @@ type
     obj is typedesc[Object]
 
 {. hints: on .}
+
+proc asSuper*[T: AbstractObject](x: T): AsSuper[T] {. inline .} =
+  AsSuper[T](obj: x, class: x.class)
+proc asSuper*[T: AbstractObject; U: AbstractObjectType](x: T; super: U): AsSuper[T] {. inline .} =
+  AsSuper[T](obj: x, class: super.class)
+template id*[T: AbstractObject](x: AsSuper[T]): ptr Super =
+  var res = Super(receiver: x.obj.id, superClass: x.class)
+  res.addr
 
 iterator supers*(typ: NimNode): NimNode =
   ## Iterates over all super types of a given object type

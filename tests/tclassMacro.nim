@@ -76,4 +76,7 @@ suite "class macro":
     check iftVars[0].name == "c"
     check iftVars[0].typeEncoding == "d"
 
+    rft.a = 42
+    check rft.a == 42
+
 {. pop .}
