@@ -189,18 +189,30 @@ template alignment(typ: typed): untyped =
     inc count
   count
 
+macro makeSingleIvarMacro(classVariable, name, typ: typed): untyped =
+  let
+    ivarName = name
+    ivarType =
+      if typ.isObject:
+        ident"Id"
+      else:
+        typ
+    alignmentProc = bindsym"alignment"
+    encodeMacro = bindsym"encode"
+  result = quote do:
+    discard `classVariable`.addIvar(`ivarName`, sizeof(`ivarType`),
+                                    `alignmentProc`(`ivarType`),
+                                    $`encodeMacro`(`ivarType`))
+
 proc makeSingleIvar(decl: NimNode; classVariable: NimNode): NimNode =
   ## Creates an Objective-C runtime call adding an Ivar corresponding to
   ## ``decl`` to the class ``class``.
   let
     ivarName = decl[0].toStrLit
     ivarType = decl[1][0]
-    alignmentProc = bindsym"alignment"
-    encodeMacro = bindsym"encode"
+    ivarMacro = bindsym"makeSingleIvarMacro"
   result = quote do:
-    discard`classVariable`.addIvar(`ivarName`, sizeof(`ivarType`),
-                                   `alignmentProc`(`ivarType`),
-                                   $`encodeMacro`(`ivarType`))
+    `ivarMacro`(`classVariable`, `ivarName`, `ivarType`)
 
 proc makeClassIvars(decls: NimNode; classVariable: NimNode): NimNode =
   ## Creates the Objective-C runtime calls necessary to bind Ivars corresponding
@@ -209,34 +221,66 @@ proc makeClassIvars(decls: NimNode; classVariable: NimNode): NimNode =
   for decl in decls:
     result.add makeSingleIvar(decl, classVariable)
 
-proc makeSingleProperty(className, decl: NimNode): NimNode =
+macro makeSinglePropertyMacro(className, name, typ: typed): untyped =
   let
     classVariable = newTree(nnkCall,
       ident"class",
       className)
-    ivarName = decl[0].toStrLit
+    ivarName = name
     ivarEqName = "set" & toUpperAscii($ivarName) & ":"
-    ivarIdent = ident($decl[0])
-    ivarEqIdent = ident($decl[0] & "=")
-    ivarType = decl[1][0]
+    ivarIdent = ident($name)
+    ivarEqIdent = ident($name & "=")
     encodeMacro = bindsym"encode"
     self = ident"self"
     value = ident"val"
+  if typ.isObject:
+    let
+      entryType = bindsym"Id"
+      exitType = entryType
+      newClassName = ident("new" & $className)
+    result = quote do:
+      var
+        attrs = [
+          PropertyAttribute(name: "T", value: `encodeMacro`(`entryType`)),
+          PropertyAttribute(name: "V", value: `ivarName`)
+        ]
+      discard `classVariable`.addProperty(`ivarName`, attrs)
+      proc `ivarIdent`*(`self`: `className`): `exitType` {. objectiveSelector: `ivarName` .} =
+        var
+          resultPtr = `self`.id.getInstanceVariablePointer(`ivarName`)
+          resultId = cast[ptr `entryType`](resultPtr)[]
+        `newClassName`(resultId)
+      proc `ivarEqIdent`*(`self`: `className`; `value`: `exitType`): void {. objectiveSelector: `ivarEqName` .} =
+        var
+          resultPtr =  `self`.id.getInstanceVariablePointer(`ivarName`)
+        cast[ptr `entryType`](resultPtr)[] = `value`.id
+  else:
+    let
+      ivarType = typ
+    result = quote do:
+      var
+        attrs = [
+          PropertyAttribute(name: "T", value: `encodeMacro`(`ivarType`)),
+          PropertyAttribute(name: "V", value: `ivarName`)
+        ]
+      discard `classVariable`.addProperty(`ivarName`, attrs)
+      proc `ivarIdent`*(`self`: `className`): `ivarType` {. objectiveSelector: `ivarName` .} =
+        var
+          resultPtr = `self`.id.getInstanceVariablePointer(`ivarName`)
+        cast[ptr `ivarType`](resultPtr)[]
+      proc `ivarEqIdent`*(`self`: `className`; `value`: `ivarType`): void {. objectiveSelector: `ivarEqName` .} =
+        var
+          resultPtr =  `self`.id.getInstanceVariablePointer(`ivarName`)
+        cast[ptr `ivarType`](resultPtr)[] = `value`
+    
+
+proc makeSingleProperty(className, decl: NimNode): NimNode =
+  let
+    ivarName = decl[0].toStrLit
+    ivarType = decl[1][0]
+    propertyMacro = bindsym"makeSinglePropertyMacro"
   result = quote do:
-    var
-      attrs = [
-        PropertyAttribute(name: "T", value: `encodeMacro`(`ivarType`)),
-        PropertyAttribute(name: "V", value: `ivarName`)
-      ]
-    discard `classVariable`.addProperty(`ivarName`, attrs)
-    proc `ivarIdent`*(`self`: `className`): `ivarType` {. objectiveSelector: `ivarName` .} =
-      var
-        resultPtr = `self`.id.getInstanceVariablePointer(`ivarName`)
-      cast[ptr `ivarType`](resultPtr)[]
-    proc `ivarEqIdent`*(`self`: `className`; `value`: `ivarType`): void {. objectiveSelector: `ivarEqName` .} =
-      var
-        resultPtr =  `self`.id.getInstanceVariablePointer(`ivarName`)
-      cast[ptr `ivarType`](resultPtr)[] = `value`
+    `propertyMacro`(`className`, `ivarName`, `ivarType`)
     
 proc makeClassProperties(className, decls: NimNode): NimNode =
   ## Adds properties corresponding to all Ivars in a class.
