@@ -131,6 +131,7 @@ proc genConceptDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =
     newProcName = ident("new" & baseName)
     converterName = ident("to" & baseName)
     resultName = ident"result"
+    disposeName = gensym(nskProc, "standardDispose")
   var
     calls = newTree(nnkStmtList)
   for prototype in methods:
@@ -151,14 +152,14 @@ proc genConceptDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =
 
     {. hints: on .}
 
-    proc standardDispose*(obj: `nameExpr`) =
+    proc `disposeName`*(obj: `nameExpr`) =
       ## Disposes a ``TypedObject`` of the given ``Protocol``.
       when defined(objcDebugAlloc):
         echo "RELEASED ", repr(cast[pointer](obj.id))
       discard objcMsgSend(obj.id, $$"release")
     proc `newProcName`*(id: Id): `nameExpr` =
       ## Creates a new TypedObject adhering to a given protocol.
-      new `resultName`, standardDispose
+      new `resultName`, `disposeName`
       `resultName`.id = id
       discard objcMsgSend(id, $$"retain")
     proc `newProcName`*(obj: `conceptName`): `nameExpr` =
