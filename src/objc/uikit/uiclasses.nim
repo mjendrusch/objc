@@ -3,8 +3,10 @@ import objc / [foundation, coregraphics]
 
 importClass UIApplication of NSObject
 
+importProtocol UIApplicationDelegate:
+  discard
+
 # FIXME
-importClass UIApplicationDelegate of NSObject
 importClass UIColor of NSObject
 importClass UIScreen of NSObject
 importClass UIScreenMode of NSObject
@@ -16,10 +18,14 @@ importClass UIView of NSObject
 importClass UIStoryboard of NSObject 
 
 # FIXME: this is a protocol!
-importClass UICoordinateSpace
-importClass UIFocusItem
-importClass UIViewControllerTransitioningDelegate
-importClass UIViewControllerTransitionCoordinator
+importProtocol UICoordinateSpace:
+  discard
+importProtocol UIFocusItem:
+  discard
+importProtocol UIViewControllerTransitioningDelegate:
+  discard
+importProtocol UIViewControllerTransitionCoordinator:
+  discard
 
 importClass UIWindow of UIView
 
