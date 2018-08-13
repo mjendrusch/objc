@@ -482,11 +482,11 @@ proc importStandardImpl(messageName: string; typedProcedure: NimNode; isSuper: b
       funp = gensym(nskLet)
     if args.kind == nnkEmpty:
       result[6] = quote do:
-        let `funp` = cast[`castType`](`msgSend`)
+        let `funp` = `msgSend`
         `newResult`(`funp`(`self`, $$`messageName`, `callArgs`))
     else:
       result[6] = quote do:
-        let `funp` = cast[`castType`](`msgSend`)
+        let `funp` = `msgSend`
         `newResult`[`args`](`funp`(`self`, $$`messageName`, `callArgs`))
   else:
     let
