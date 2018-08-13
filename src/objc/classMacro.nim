@@ -193,7 +193,7 @@ macro makeSingleIvarMacro(classVariable, name, typ: typed): untyped =
   let
     ivarName = name
     ivarType =
-      if typ.isObject:
+      if (typ.getImpl)[2].isObject:
         ident"Id"
       else:
         typ
@@ -202,7 +202,7 @@ macro makeSingleIvarMacro(classVariable, name, typ: typed): untyped =
   result = quote do:
     discard `classVariable`.addIvar(`ivarName`, sizeof(`ivarType`),
                                     `alignmentProc`(`ivarType`),
-                                    $`encodeMacro`(`ivarType`))
+                                    $`encodeMacro`(`typ`))
 
 proc makeSingleIvar(decl: NimNode; classVariable: NimNode): NimNode =
   ## Creates an Objective-C runtime call adding an Ivar corresponding to
@@ -233,26 +233,28 @@ macro makeSinglePropertyMacro(className, name, typ: typed): untyped =
     encodeMacro = bindsym"encode"
     self = ident"self"
     value = ident"val"
-  if typ.isObject:
+  if (typ.getImpl)[2].isObject:
     let
       entryType = bindsym"Id"
-      exitType = entryType
-      newClassName = ident("new" & $className)
+      exitType = typ
+      newTypName = ident("new" & $typ)
     result = quote do:
       var
         attrs = [
-          PropertyAttribute(name: "T", value: `encodeMacro`(`entryType`)),
+          PropertyAttribute(name: "T", value: `encodeMacro`(`exitType`)),
           PropertyAttribute(name: "V", value: `ivarName`)
         ]
-      discard `classVariable`.addProperty(`ivarName`, attrs)
+      nslog("ADDED PROPERTY? " & $`classVariable`.addProperty(`ivarName`, attrs))
       proc `ivarIdent`*(`self`: `className`): `exitType` {. objectiveSelector: `ivarName` .} =
         var
           resultPtr = `self`.id.getInstanceVariablePointer(`ivarName`)
           resultId = cast[ptr `entryType`](resultPtr)[]
-        `newClassName`(resultId)
+        nslog("RESULT ID: " & $cast[int](resultId))
+        `newTypName`(resultId)
       proc `ivarEqIdent`*(`self`: `className`; `value`: `exitType`): void {. objectiveSelector: `ivarEqName` .} =
         var
           resultPtr =  `self`.id.getInstanceVariablePointer(`ivarName`)
+        nslog("VALUE ID: " & $cast[int](`value`.id))
         cast[ptr `entryType`](resultPtr)[] = `value`.id
   else:
     let
@@ -267,6 +269,7 @@ macro makeSinglePropertyMacro(className, name, typ: typed): untyped =
       proc `ivarIdent`*(`self`: `className`): `ivarType` {. objectiveSelector: `ivarName` .} =
         var
           resultPtr = `self`.id.getInstanceVariablePointer(`ivarName`)
+        nslog("OH FUCK NO! " & $`ivarName`)
         cast[ptr `ivarType`](resultPtr)[]
       proc `ivarEqIdent`*(`self`: `className`; `value`: `ivarType`): void {. objectiveSelector: `ivarEqName` .} =
         var
@@ -308,6 +311,7 @@ proc makeClassVariable(class, super, decls: NimNode): NimNode =
         else:
           newClass(class(`superName`), `className`, 0) # FIXME
       `addAllIvars`
+      # discard `theClass`.addProtocol(protocol("UIApplicationDelegate"))
       `theClass`.register
 
 proc makeSuperTemplates*(className, superName: NimNode): NimNode =

@@ -6,19 +6,18 @@ macro importProperty*(class, nameType: untyped): untyped =
     name = nameType[1]
     nameEq = ident($name & "=")
     typ = nameType[2]
-    getString = "get" & capitalizeAscii($name)
+    getString = $name
     setString = "set" & capitalizeAscii($name) & ":"
   result = quote do:
     proc `name`*(self: `class`): `typ` {. importMethodNoSuper: `getString` .}
     proc `nameEq`*(self: `class`; value: `typ`): void {. importMethodNoSuper: `setString` .}
-  echo toStrLit result
 
 macro importProperty*(class, nameType: untyped; options: untyped): untyped =
   var
     name = nameType[1]
     nameEq = ident($name & "=")
     typ = nameType[2]
-    getString = "get" & capitalizeAscii($name)
+    getString = $name
     setString = "set" & capitalizeAscii($name) & ":"
     read = true
     write = true

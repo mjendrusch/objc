@@ -39,7 +39,7 @@ type
 {. hints: on .}
 
 proc asSuper*[T: AbstractObject](x: T): AsSuper[T] {. inline .} =
-  AsSuper[T](obj: x, class: x.class)
+  AsSuper[T](obj: x, class: x.class.super)
 proc asSuper*[T: AbstractObject; U: AbstractObjectType](x: T; super: U): AsSuper[T] {. inline .} =
   AsSuper[T](obj: x, class: super.class)
 template id*[T: AbstractObject](x: AsSuper[T]): ptr Super =

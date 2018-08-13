@@ -1,6 +1,8 @@
 import objc
 import objc / [foundation, coregraphics]
 
+{. passL: "-framework UIKit" .}
+
 importClass UIApplication of NSObject
 
 importProtocol UIApplicationDelegate:

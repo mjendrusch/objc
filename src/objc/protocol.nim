@@ -119,7 +119,12 @@ proc genProtocolImport(nameExpr: NimNode): NimNode =
   let
     name = $nameExpr
   result = quote do:
-    template protocol*(typ: typedesc[`nameExpr`]): Protocol = protocol(`name`)
+    nslog("ALL NIL? " & $cast[int](objc_getProtocol(`name`)))
+    proc protocol*(typ: typedesc[`nameExpr`]): Protocol =
+      let
+        prot = objc_getProtocol(`name`)
+      nslog("PROTOCOL NIL? " & $cast[int](prot))
+      prot
 
 proc genConceptDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =
   ## Generates a concept definition for a given nameExpression and required
@@ -230,7 +235,10 @@ template attachProtocol*(c, p: untyped): untyped =
   let
     cls: Class = c.class
     prt: Protocol = p.protocol
-  discard addProtocol(cls, prt)
+    res = addProtocol(cls, prt)
+  nslog("attached? " & $int(res))
+  nslog("protocol: " & $cast[int](prt))
+  nslog("has? " & $cls.conformsTo(prt))
 
 template `&&&`*(x, y: typedesc): untyped =
   ## `and` conjunction for objc-Protocol concepts.
