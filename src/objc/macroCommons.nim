@@ -50,26 +50,29 @@ iterator supers*(typ: NimNode): NimNode =
   ## Iterates over all super types of a given object type
   ## represented by a NimNode.
   expectKind typ, {nnkObjectTy, nnkRefTy, nnkPtrTy}
-  var
-    previousInherit = newEmptyNode()
-    lastInherit =
-      if typ.kind in {nnkRefTy, nnkPtrTy}:
-        typ[0].getTypeImpl[1]
-      else:
-        typ[1]
-  while lastInherit.kind == nnkOfInherit:
-    yield lastInherit[0]
-    if lastInherit[0].eqIdent "RootObj":
-      break
-    let
-      typeImpl = getTypeImpl(lastInherit[0])
-    if typeImpl.kind == nnkSym:
-      lastInherit = getTypeImpl(lastInherit[0])[1]
-    elif typeImpl.kind == nnkRefTy:
-      lastInherit = getTypeImpl(lastInherit[0])[0].getTypeImpl[1]
-    if previousInherit == lastInherit[0]:
-      break
-    previousInherit = lastInherit[0]
+  if typ.kind == nnkPtrTy and typ[0].kind != nnkObjectTy and typ[0].getTypeImpl.len < 2:
+    discard
+  else:
+    var
+      previousInherit = newEmptyNode()
+      lastInherit =
+        if typ.kind in {nnkRefTy, nnkPtrTy}:
+          typ[0].getTypeImpl[1]
+        else:
+          typ[1]
+    while lastInherit.kind == nnkOfInherit:
+      yield lastInherit[0]
+      if lastInherit[0].eqIdent "RootObj":
+        break
+      let
+        typeImpl = getTypeImpl(lastInherit[0])
+      if typeImpl.kind == nnkSym:
+        lastInherit = getTypeImpl(lastInherit[0])[1]
+      elif typeImpl.kind == nnkRefTy:
+        lastInherit = getTypeImpl(lastInherit[0])[0].getTypeImpl[1]
+      if previousInherit == lastInherit[0]:
+        break
+      previousInherit = lastInherit[0]
 
 proc isClass*(typ: NimNode): bool =
   ## Checks, whether an object type represents an Objective-C class.
