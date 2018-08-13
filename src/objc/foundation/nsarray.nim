@@ -48,3 +48,11 @@ proc make*[T](self: typedesc[NSArray[T]]; os: varargs[T]): NSArray[T] =
 proc nsarray*[T](os: varargs[T]): NSArray[T] =
   ## Varargs utility function.
   NSArray[NSObject].make(os)
+
+iterator items*[T](self: NSArray[T]): T =
+  for idx in 0 ..< self.len:
+    yield self[idx]
+
+iterator pairs*[T](self: NSArray[T]): tuple[idx: int; val: T] =
+  for idx in 0 ..< self.len:
+    yield (idx, self[idx])

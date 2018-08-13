@@ -1,27 +1,33 @@
 import objc
 import objc/foundation
 import objc/coreanimation/layer
+import avclasses
 
-importClass AVCaptureVideoPreviewLayer of CALayer
-importClass AVCaptureInputPort of NSObject
-importClass AVCaptureConnection of NSObject
-importClass AVCaptureInput of NSObject
-importClass AVCaptureOutput of NSObject
-importClass AVCaptureSession of NSObject
+AVCaptureSession.importProperties:
+  sessionPreset is NSString
 
 proc alloc*(self: typedesc[AVCaptureSession]): AVCaptureSession {. importMethod: "alloc" .}
 proc init*(self: AVCaptureSession): AVCaptureSession {. importMethod: "init" .}
 
 proc canAddInput*(self: AVCaptureSession; input: AVCaptureInput): Boolean {. importMethod: "canAddInput:" .}
 proc addInput*(self: AVCaptureSession; input: AVCaptureInput): void {. importMethod: "addInput:" .}
+proc addOutput*(self: AVCaptureSession; otuput: AVCaptureOutput): void {. importMethod: "addOutput:" .}
 proc removeInput*(self: AVCaptureSession; input: AVCaptureInput): void {. importMethod: "removeInput:" .}
+proc start*(self: AVCaptureSession): void {. importMethod: "startRunning" .}
+
+proc beginConfiguration*(self: AVCaptureSession): void {. importMethod: "beginConfiguration" .}
+proc commitConfiguration*(self: AVCaptureSession): void {. importMethod: "commitConfiguration" .}
+template configure*(self: AVCaptureSession; body: untyped): untyped =
+  self.beginConfiguration
+  body
+  self.commitConfiguration
 
 proc init*(self: AVCaptureVideoPreviewLayer; session: AVCaptureSession): AVCaptureVideoPreviewLayer {.
   importMethod: "initWithSession:"
 .}
 
 proc initNoConnection*(self: AVCaptureVideoPreviewLayer;
-                           session: AVCaptureSession): AVCaptureVideoPreviewLayer {.
+                       session: AVCaptureSession): AVCaptureVideoPreviewLayer {.
   importMethod: "initWithSessionWithNoConnection:"
 .}
 
