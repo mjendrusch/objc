@@ -513,6 +513,7 @@ proc importSuperImpl(messageName: string; typedProcedure: NimNode;
     result[0] = newTree(nnkPostfix, ident"*", ident($newProcedure[0]))
   else:
     result[0] = ident($newProcedure[0])
+    result.addPragma(ident"used")
 
 proc importMethodImpl(messageName: string; typedProcedure: NimNode;
                       shouldExport: bool;
@@ -528,6 +529,7 @@ proc importMethodImpl(messageName: string; typedProcedure: NimNode;
     let
       self = importStandardImpl(messageName, typedProcedure)
     result.add self
+  echo toStrLit result
 
 macro importSuperTyped(messageName: static[string]; procedure: typed;
                         shouldExport: static[bool]): untyped =
