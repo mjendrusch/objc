@@ -119,11 +119,9 @@ proc genProtocolImport(nameExpr: NimNode): NimNode =
   let
     name = $nameExpr
   result = quote do:
-    nslog("ALL NIL? " & $cast[int](objc_getProtocol(`name`)))
     proc protocol*(typ: typedesc[`nameExpr`]): Protocol =
       let
         prot = objc_getProtocol(`name`)
-      nslog("PROTOCOL NIL? " & $cast[int](prot))
       prot
 
 proc genConceptDecl(nameExpr: NimNode; methods: seq[NimNode]): NimNode =

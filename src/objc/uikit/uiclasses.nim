@@ -9,6 +9,7 @@ importProtocol UIApplicationDelegate:
   discard
 
 # FIXME
+importClass UIImage of NSObject
 importClass UIColor of NSObject
 importClass UIScreen of NSObject
 importClass UIScreenMode of NSObject
@@ -16,8 +17,11 @@ importClass UIScreenMode of NSObject
 # FIXME: does not belong here!
 importClass CADisplayLink
 
+importClass UIFont of NSObject
 importClass UIView of NSObject
 importClass UIStoryboard of NSObject 
+
+importClass UIBaselineAdjustment
 
 # FIXME: this is a protocol!
 importProtocol UICoordinateSpace:
